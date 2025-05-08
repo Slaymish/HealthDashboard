@@ -1,0 +1,44 @@
+{{ template "layout.tmpl" . }}
+
+{{ define "content" }}
+<div class="grid gap-8 md:grid-cols-3">
+  <!-- quick-add cards -->
+  <div class="space-y-4 md:col-span-1">
+    <!-- Weight -->
+    <form hx-post="/log" hx-target="#summary" hx-swap="outerHTML"
+          class="bg-zinc-900 rounded-xl p-4 space-y-3 shadow">
+      <h2 class="font-semibold text-lg">Add Weight</h2>
+      <input type="number" step="0.1" name="weight_kg"
+             class="w-full rounded bg-zinc-800 p-2"
+             placeholder="kg" required>
+      <button class="w-full py-2 bg-emerald-600 rounded text-white">Save</button>
+    </form>
+
+    <!-- Mood -->
+    <form hx-post="/log" hx-target="#summary" hx-swap="outerHTML"
+          class="bg-zinc-900 rounded-xl p-4 space-y-3 shadow">
+      <h2 class="font-semibold text-lg">Log Mood (1-10)</h2>
+      <input type="number" min="1" max="10" name="mood"
+             class="w-full rounded bg-zinc-800 p-2"
+             placeholder="7">
+      <button class="w-full py-2 bg-emerald-600 rounded text-white">Save</button>
+    </form>
+
+    <!-- Sleep -->
+    <form hx-post="/log" hx-target="#summary" hx-swap="outerHTML"
+          class="bg-zinc-900 rounded-xl p-4 space-y-3 shadow">
+      <h2 class="font-semibold text-lg">Sleep Minutes</h2>
+      <input type="number" min="0" name="sleep_min"
+             class="w-full rounded bg-zinc-800 p-2"
+             placeholder="480">
+      <button class="w-full py-2 bg-emerald-600 rounded text-white">Save</button>
+    </form>
+  </div>
+
+  <!-- summary table -->
+  <div id="summary" class="md:col-span-2">
+    {{ template "daily_summary.tmpl" . }}
+  </div>
+</div>
+{{ end }}
+

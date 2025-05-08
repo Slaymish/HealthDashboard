@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>HealthDash</title>
+
+  <!-- CDN Tailwind for dev. Swap to /static/tailwind.min.css if you compile -->
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@3.4.2/dist/tailwind.min.css" rel="stylesheet">
+
+  <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+</head>
+<body class="p-6 bg-zinc-950 text-zinc-100 min-h-screen">
+  <h1 class="text-3xl font-bold mb-6">🩺 Health Dashboard</h1>
+  {{ block "content" . }}{{ end }}
+</body>
+</html>
+

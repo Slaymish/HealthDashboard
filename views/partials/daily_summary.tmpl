@@ -1,0 +1,30 @@
+<table class="w-full text-sm border-collapse">
+  <thead>
+    <tr class="border-b border-zinc-700 text-left">
+      <th class="py-2">Date</th>
+      <th>Weight</th>
+      <th>kcal est / bud</th>
+      <th>Mood</th>
+      <th>Motivation</th>
+      <th>Activity&nbsp;(min)</th>
+      <th>Sleep&nbsp;(min)</th>
+    </tr>
+  </thead>
+  <tbody>
+    {{ range . }}
+    <tr class="border-b border-zinc-800">
+      <td>{{ .LogDate.Format "02 Jan" }}</td>
+      <td>{{ fmtF2 .WeightKg }}kg</td>
+      <td>
+        {{ if .KcalEstimated }}{{ fmtInt .KcalEstimated }}{{ end }}
+        {{ if .KcalBudgeted }} / {{ fmtInt .KcalBudgeted }}{{ end }}
+      </td>
+      <td>{{ fmtInt .Mood }}</td>
+      <td>{{ fmtInt .Motivation }}</td>
+      <td>{{ fmtInt .TotalActivityMin }}</td>
+      <td>{{ fmtInt .SleepDurationMins }}</td>
+    </tr>
+    {{ end }}
+  </tbody>
+</table>
+
