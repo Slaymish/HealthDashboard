@@ -1,43 +1,30 @@
 {{ template "layout.tmpl" . }}
 
 {{ define "content" }}
-<div class="grid gap-8 md:grid-cols-3">
-  <!-- quick-add cards -->
-  <div class="space-y-4 md:col-span-1">
-    <!-- Weight -->
-    <form hx-post="/log" hx-target="#summary" hx-swap="outerHTML"
-          class="bg-zinc-900 rounded-xl p-4 space-y-3 shadow">
-      <h2 class="font-semibold text-lg">Add Weight</h2>
-      <input type="number" step="0.1" name="weight_kg"
-             class="w-full rounded bg-zinc-800 p-2"
-             placeholder="kg" required>
-      <button class="w-full py-2 bg-emerald-600 rounded text-white">Save</button>
-    </form>
-
-    <!-- Mood -->
-    <form hx-post="/log" hx-target="#summary" hx-swap="outerHTML"
-          class="bg-zinc-900 rounded-xl p-4 space-y-3 shadow">
-      <h2 class="font-semibold text-lg">Log Mood (1-10)</h2>
-      <input type="number" min="1" max="10" name="mood"
-             class="w-full rounded bg-zinc-800 p-2"
-             placeholder="7">
-      <button class="w-full py-2 bg-emerald-600 rounded text-white">Save</button>
-    </form>
-
-    <!-- Sleep -->
-    <form hx-post="/log" hx-target="#summary" hx-swap="outerHTML"
-          class="bg-zinc-900 rounded-xl p-4 space-y-3 shadow">
-      <h2 class="font-semibold text-lg">Sleep Minutes</h2>
-      <input type="number" min="0" name="sleep_min"
-             class="w-full rounded bg-zinc-800 p-2"
-             placeholder="480">
-      <button class="w-full py-2 bg-emerald-600 rounded text-white">Save</button>
-    </form>
+<div class="grid gap-6 sm:gap-8 md:grid-cols-3">
+  <!-- forms -->
+  <div class="space-y-6 md:col-span-1">
+    {{ template "cards.tmpl" . }}
   </div>
 
-  <!-- summary table -->
-  <div id="summary" class="md:col-span-2">
-    {{ template "daily_summary.tmpl" . }}
+  <!-- tables + charts -->
+  <div class="space-y-8 md:col-span-2">
+    <div id="summary">
+      {{ template "daily_summary.tmpl" .Summary }}
+    </div>
+
+    <!-- BMI chart card -->
+    {{ template "bmi_chart.tmpl" . }}
+
+    <!-- Weekly stats card (HTMX loads partial) -->
+    <div class="bg-white dark:bg-zinc-900 rounded-2xl shadow p-5 sm:p-6"
+         hx-get="/weekly" hx-trigger="load every 10m" hx-swap="outerHTML">
+      Loading weekly stats…
+    </div>
+
+    <div id="foodList">
+      {{ template "food.tmpl" .Food }}
+    </div>
   </div>
 </div>
 {{ end }}

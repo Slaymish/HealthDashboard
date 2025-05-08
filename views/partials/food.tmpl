@@ -1,0 +1,24 @@
+<div class="overflow-x-auto rounded-2xl shadow bg-white dark:bg-zinc-900">
+  <table class="w-full text-sm border-collapse">
+    <thead class="sticky top-0 backdrop-blur bg-white/80 dark:bg-zinc-900/80">
+      <tr class="border-b border-zinc-200 dark:border-zinc-800 text-left">
+        <th class="py-3 px-4">Time</th>
+        <th class="px-4">Calories</th>
+        <th class="px-4">Note</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{ if not . }}<tr><td class="p-4 text-zinc-500" colspan="3">No entries yet</td></tr>{{ end }}
+      {{ range $i, $f := . }}
+      <tr class="{{ if mod $i 2 }}bg-zinc-50 dark:bg-zinc-800{{ end }}
+                 hover:bg-zinc-100 dark:hover:bg-zinc-700
+                 border-b border-zinc-100 dark:border-zinc-800">
+        <td class="py-3 px-4 whitespace-nowrap">{{ $f.CreatedAt.Format "15:04" }}</td>
+        <td class="px-4 tabular-nums">{{ $f.Calories }}</td>
+        <td class="px-4">{{ if $f.Note }}{{ $f.Note }}{{ else }}–{{ end }}</td>
+      </tr>
+      {{ end }}
+    </tbody>
+  </table>
+</div>
+

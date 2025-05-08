@@ -1,30 +1,36 @@
-<table class="w-full text-sm border-collapse">
-  <thead>
-    <tr class="border-b border-zinc-700 text-left">
-      <th class="py-2">Date</th>
-      <th>Weight</th>
-      <th>kcal est / bud</th>
-      <th>Mood</th>
-      <th>Motivation</th>
-      <th>Activity&nbsp;(min)</th>
-      <th>Sleep&nbsp;(min)</th>
-    </tr>
-  </thead>
-  <tbody>
-    {{ range . }}
-    <tr class="border-b border-zinc-800">
-      <td>{{ .LogDate.Format "02 Jan" }}</td>
-      <td>{{ fmtF2 .WeightKg }}kg</td>
-      <td>
-        {{ if .KcalEstimated }}{{ fmtInt .KcalEstimated }}{{ end }}
-        {{ if .KcalBudgeted }} / {{ fmtInt .KcalBudgeted }}{{ end }}
-      </td>
-      <td>{{ fmtInt .Mood }}</td>
-      <td>{{ fmtInt .Motivation }}</td>
-      <td>{{ fmtInt .TotalActivityMin }}</td>
-      <td>{{ fmtInt .SleepDurationMins }}</td>
-    </tr>
-    {{ end }}
-  </tbody>
-</table>
+<div class="overflow-x-auto rounded-2xl shadow
+            shadow-zinc-200 dark:shadow-zinc-900/40">
+  <table class="w-full text-sm border-collapse">
+    <thead class="sticky top-0 backdrop-blur
+                 bg-white/70 dark:bg-zinc-950/70">
+      <tr class="border-b border-zinc-200 dark:border-zinc-800 text-left">
+        <th class="py-3 px-4">Date</th>
+        <th class="px-4">Weight</th>
+        <th class="px-4">kcal est / bud</th>
+        <th class="px-4">Mood</th>
+        <th class="px-4">Motivation</th>
+        <th class="px-4">Activity</th>
+        <th class="px-4">Sleep</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{ range $i, $row := . }}
+      <tr class="{{ if mod $i 2 }}bg-zinc-50 dark:bg-zinc-900{{ end }}
+                 hover:bg-zinc-100 dark:hover:bg-zinc-800
+                 border-b border-zinc-100 dark:border-zinc-800">
+        <td class="py-3 px-4 whitespace-nowrap">{{ $row.LogDate.Format "02 Jan" }}</td>
+        <td class="px-4 tabular-nums">{{ fmtF2 $row.WeightKg }}kg</td>
+        <td class="px-4 tabular-nums">
+          {{ if $row.KcalEstimated }}{{ fmtInt $row.KcalEstimated }}{{ end }}
+          {{ if $row.KcalBudgeted }} / {{ fmtInt $row.KcalBudgeted }}{{ end }}
+        </td>
+        <td class="px-4 tabular-nums">{{ fmtInt $row.Mood }}</td>
+        <td class="px-4 tabular-nums">{{ fmtInt $row.Motivation }}</td>
+        <td class="px-4 tabular-nums">{{ fmtInt $row.TotalActivityMin }}</td>
+        <td class="px-4 tabular-nums">{{ fmtInt $row.SleepDurationMins }}</td>
+      </tr>
+      {{ end }}
+    </tbody>
+  </table>
+</div>
 

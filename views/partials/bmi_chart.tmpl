@@ -1,0 +1,35 @@
+<div class="bg-white dark:bg-zinc-900 rounded-2xl shadow p-5 sm:p-6 space-y-4">
+  <h2 class="font-semibold text-base sm:text-lg">BMI Trend (30 days)</h2>
+
+  <!-- canvas resizes with parent -->
+  <canvas id="bmiChart" class="w-full" height="128"></canvas>
+
+  <!-- HTMX fetch JSON once on load -->
+  <div hx-get="/api/bmi" hx-trigger="load" hx-target="#bmiChart"
+       hx-swap="none"
+       hx-on::after-request="renderBMIChart(event.detail.xhr.responseText)">
+  </div>
+
+  <script>
+    function renderBMIChart(json) {
+      const data = JSON.parse(json);
+      const labels = data.map(p => new Date(p.date).toLocaleDateString('en-NZ',{month:'short',day:'2-digit'}));
+      const values = data.map(p => p.bmi);
+
+      const ctx = document.getElementById('bmiChart');
+      if (ctx.dataset.initialised) return; // avoid double init
+      ctx.dataset.initialised = true;
+
+      new Chart(ctx, {
+        type: 'line',
+        data: { labels, datasets:[{label:'BMI', data:values, fill:false, tension:0.3}]},
+        options: {
+          responsive: true,
+          scales: { y:{ beginAtZero:false } },
+          plugins:{ legend:{display:false} }
+        }
+      });
+    }
+  </script>
+</div>
+

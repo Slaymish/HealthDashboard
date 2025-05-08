@@ -1,17 +1,72 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="scroll-smooth">
 <head>
   <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <!-- Tailwind CDN – make sure dark-mode is class-based BEFORE the script loads -->
+  <script>
+    tailwind = {};           /* create the global */
+    tailwind.config = { darkMode: 'class' };
+  </script>
+  <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
+
   <title>HealthDash</title>
 
-  <!-- CDN Tailwind for dev. Swap to /static/tailwind.min.css if you compile -->
-  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@3.4.2/dist/tailwind.min.css" rel="stylesheet">
+  <!-- theme toggle -->
+  <script>
+    (() => {
+      const root = document.documentElement;
+      const apply = d => root.classList.toggle('dark', d);
+      const stored = localStorage.getItem('theme');
+      apply(stored ? stored === 'dark'
+                   : matchMedia('(prefers-color-scheme: dark)').matches);
+      window.toggleTheme = () => {
+        const darkNow = !root.classList.contains('dark');
+        apply(darkNow);
+        localStorage.setItem('theme', darkNow ? 'dark' : 'light');
+      };
+    })();
+  </script>
+
+  <style>
+    :root      { --accent:#14b8a6 }
+    .dark      { --accent:#22d3ee }
+    ::selection{ background:var(--accent);color:#fff }
+  </style>
+</head>
+
+<body class="bg-zinc-100 text-zinc-800 dark:bg-zinc-950 dark:text-zinc-100
+             min-h-screen flex flex-col">
+
+  <!-- header -->
+  <header class="border-b border-zinc-200 dark:border-zinc-800">
+    <div class="max-w-5xl mx-auto px-4 py-3 flex justify-between items-center">
+      <h1 class="text-xl sm:text-2xl font-bold flex items-center gap-2">
+        <span class="text-[1.4rem] sm:text-[1.6rem]">🩺</span> Health&nbsp;Dashboard
+      </h1>
+
+      <button onclick="toggleTheme()"
+              class="px-3 py-1.5 sm:py-2 rounded-lg text-sm border
+                     border-zinc-300 dark:border-zinc-700
+                     hover:bg-zinc-200 dark:hover:bg-zinc-800 transition">
+        <span class="hidden dark:inline">☀️ Light</span>
+        <span class="inline dark:hidden">🌙 Dark</span>
+      </button>
+    </div>
+  </header>
+
+  <main class="flex-1 max-w-5xl mx-auto px-4 py-6 sm:py-8">
+    {{ block "content" . }}{{ end }}
+  </main>
+
+  <footer class="text-center text-xs text-zinc-500 py-4">
+    Built with Go · HTMX · Tailwind
+  </footer>
 
   <script src="https://unpkg.com/htmx.org@1.9.10"></script>
-</head>
-<body class="p-6 bg-zinc-950 text-zinc-100 min-h-screen">
-  <h1 class="text-3xl font-bold mb-6">🩺 Health Dashboard</h1>
-  {{ block "content" . }}{{ end }}
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
 </body>
 </html>
 

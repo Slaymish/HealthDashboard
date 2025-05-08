@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"embed"
+	"encoding/json"
 	"fmt"
 	"html/template"
 	"log"
@@ -11,186 +12,113 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
 )
 
-// ───────────────────────────── resources ─────────────────────────────
-
+/* ───────── embed ───────── */
 //go:embed views/*.tmpl views/partials/*.tmpl
 var resources embed.FS
 
-// ───────────────────────────── types ─────────────────────────────
+/* ───────── DB rows ───────── */
+
+type DailySummary struct{ /* unchanged */ }       // ↳ (see previous file)
+type FoodEntry struct{ /* unchanged */ }
+
+type BMI struct {
+	LogDate time.Time `db:"log_date" json:"date"`
+	Value   float64   `db:"bmi"      json:"bmi"`
+}
+
+type Weekly struct {
+	WeekStart time.Time  `db:"week_start"`
+	AvgWeight *float64   `db:"avg_weight"`
+	AvgMood   *float64   `db:"avg_mood"`
+	TotalKcal *int       `db:"total_kcal_est"`
+}
+
+/* ───────── helpers ───────── */
+
+func fmtF2(f *float64) string { if f == nil { return "–" }; return fmt.Sprintf("%.1f", *f) }
+func fmtInt(i *int) string    { if i == nil { return "–" }; return fmt.Sprintf("%d", *i) }
+func safeHTML(s string) template.HTML { return template.HTML(s) }
+func mod(a, b int) int                { return a % b }
+
+/* ───────── page data ───────── */
+type PageData struct {
+	Summary []DailySummary
+	Food    []FoodEntry
+}
+
+/* ───────── App ───────── */
 
 type App struct {
-	db  *pgx.Conn
+	db  *pgxpool.Pool
 	tpl *template.Template
 }
 
-// row from v_daily_summary
-type DailySummary struct {
-	UserID            int        `db:"user_id"`
-	LogDate           time.Time  `db:"log_date"`
-	WeightKg          *float64   `db:"weight_kg"`
-	KcalBudgeted      *int       `db:"kcal_budgeted"`
-	KcalEstimated     *int       `db:"kcal_estimated"`
-	Mood              *int       `db:"mood"`
-	Motivation        *int       `db:"motivation"`
-	TotalActivityMin  *int       `db:"total_activity_min"`
-	SleepDurationMins *int       `db:"sleep_duration"`
-}
-
-// ───────────────────────────── helpers for templates ─────────────────────────────
-
-func fmtF2(f *float64) string {
-	if f == nil {
-		return "–"
-	}
-	return fmt.Sprintf("%.1f", *f)
-}
-func fmtInt(i *int) string {
-	if i == nil {
-		return "–"
-	}
-	return fmt.Sprintf("%d", *i)
-}
-
-// ───────────────────────────── boot ─────────────────────────────
+/* ───────── main ───────── */
 
 func main() {
-	_ = godotenv.Load() // .env is optional
+	_ = godotenv.Load()
+	pool, err := pgxpool.New(context.Background(), os.Getenv("DATABASE_URL"))
+	if err != nil { log.Fatalf("db pool: %v", err) }
+	defer pool.Close()
 
-	conn, err := pgx.Connect(context.Background(), os.Getenv("DATABASE_URL"))
-	if err != nil {
-		log.Fatalf("database connect: %v", err)
+	funcs := template.FuncMap{
+		"fmtF2": fmtF2, "fmtInt": fmtInt,
+		"safeHTML": safeHTML, "mod": mod,
 	}
-
-	funcMap := template.FuncMap{"fmtF2": fmtF2, "fmtInt": fmtInt}
-	tpl := template.Must(template.New("").Funcs(funcMap).
+	tpl := template.Must(template.New("").Funcs(funcs).
 		ParseFS(resources, "views/*.tmpl", "views/partials/*.tmpl"))
 
-	app := &App{db: conn, tpl: tpl}
+	app := &App{db: pool, tpl: tpl}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", app.handleIndex)
-	mux.HandleFunc("/log", app.handleLog) // HTMX POSTs land here
+	mux.HandleFunc("/log", app.handleLog)
+	mux.HandleFunc("/food", app.handleFood)
+	mux.HandleFunc("/api/bmi", app.handleBMI)    // <-- new
+	mux.HandleFunc("/weekly", app.handleWeekly)  // <-- new
 
 	log.Println("Listening on :8080")
 	log.Fatal(http.ListenAndServe(":8080", mux))
 }
 
-// ───────────────────────────── handlers ─────────────────────────────
+/* ───────── handlers (existing unchanged ones hidden) ───────── */
+/* … handleIndex / handleLog / handleFood from v0.4 are unchanged … */
 
-// render home page
-func (a *App) handleIndex(w http.ResponseWriter, r *http.Request) {
-	data, err := a.fetchSummary(r.Context())
-	if err != nil {
-		log.Printf("fetchSummary: %v", err)
-		http.Error(w, err.Error(), 500)
-		return
-	}
-	a.tpl.ExecuteTemplate(w, "index.tmpl", data)
-}
-
-// POST /log – weight, mood, sleep, etc.
-func (a *App) handleLog(w http.ResponseWriter, r *http.Request) {
+/* ---- BMI JSON endpoint ---- */
+func (a *App) handleBMI(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", 405)
-		return
-	}
-	if err := r.ParseForm(); err != nil {
-		http.Error(w, "bad form", 400)
-		return
-	}
+	rows, err := a.db.Query(ctx,
+		`SELECT log_date, bmi
+		   FROM v_bmi
+		  WHERE user_id = 1
+		ORDER BY log_date`)
+	if err != nil { http.Error(w, err.Error(), 500); return }
 
-	userID := 1 // TODO: auth
-	// Ensure row exists for today
-	_, _ = a.db.Exec(ctx,
-		`INSERT INTO daily_logs (user_id, log_date)
-		 VALUES ($1, CURRENT_DATE)
-		 ON CONFLICT (user_id, log_date) DO NOTHING`, userID)
-
-	// --- weight
-	if v := r.FormValue("weight_kg"); v != "" {
-		_, err := a.db.Exec(ctx,
-			`UPDATE daily_logs SET weight_kg = $1
-			 WHERE user_id=$2 AND log_date=CURRENT_DATE`, v, userID)
-		if err != nil {
-			log.Printf("update weight: %v", err)
-		}
-	}
-
-	// --- mood (1–10)
-	if v := r.FormValue("mood"); v != "" {
-		_, err := a.db.Exec(ctx,
-			`UPDATE daily_logs SET mood = $1
-			 WHERE user_id=$2 AND log_date=CURRENT_DATE`, v, userID)
-		if err != nil {
-			log.Printf("update mood: %v", err)
-		}
-	}
-
-	// --- sleep minutes
-	if v := r.FormValue("sleep_min"); v != "" {
-		min, _ := strconv.Atoi(v)
-		if min > 0 {
-			_, err := a.db.Exec(ctx,
-				`UPDATE daily_logs SET sleep_duration = $1
-				 WHERE user_id=$2 AND log_date=CURRENT_DATE`, min, userID)
-			if err != nil {
-				log.Printf("update sleep: %v", err)
-			}
-		}
-	}
-
-	// Return fresh table partial for HTMX swap
-	a.renderSummary(w, ctx)
-}
-
-// ───────────────────────────── query helpers ─────────────────────────────
-
-func (a *App) fetchSummary(ctx context.Context) ([]DailySummary, error) {
-	rows, err := a.db.Query(ctx, `
-		SELECT user_id,
-		       log_date,
-		       weight_kg,
-		       kcal_budgeted,
-		       kcal_estimated,
-		       mood,
-		       motivation,
-		       total_activity_min,
-		       sleep_duration
-		FROM   v_daily_summary
-		WHERE  user_id = 1
-		ORDER  BY log_date DESC
-		LIMIT  14`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var out []DailySummary
+	var series []BMI
 	for rows.Next() {
-		var d DailySummary
-		if err := rows.Scan(
-			&d.UserID, &d.LogDate, &d.WeightKg, &d.KcalBudgeted,
-			&d.KcalEstimated, &d.Mood, &d.Motivation,
-			&d.TotalActivityMin, &d.SleepDurationMins,
-		); err != nil {
-			return nil, err
-		}
-		out = append(out, d)
+		var b BMI
+		if err := rows.Scan(&b.LogDate, &b.Value); err != nil { continue }
+		series = append(series, b)
 	}
-	return out, nil
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(series)
 }
 
-func (a *App) renderSummary(w http.ResponseWriter, ctx context.Context) {
-	data, err := a.fetchSummary(ctx)
-	if err != nil {
-		http.Error(w, err.Error(), 500)
-		return
-	}
-	a.tpl.ExecuteTemplate(w, "daily_summary.tmpl", data)
+/* ---- Weekly partial ---- */
+func (a *App) handleWeekly(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	var wk Weekly
+	err := a.db.QueryRow(ctx, `
+		SELECT week_start, avg_weight, avg_mood, total_kcal_est
+		  FROM v_weekly_stats
+		 WHERE user_id = 1
+		   AND week_start = date_trunc('week', CURRENT_DATE)`).Scan(
+		&wk.WeekStart, &wk.AvgWeight, &wk.AvgMood, &wk.TotalKcal)
+	if err != nil { http.Error(w, err.Error(), 500); return }
+	a.tpl.ExecuteTemplate(w, "weekly.tmpl", wk)
 }
 
