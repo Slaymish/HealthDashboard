@@ -1,66 +1,61 @@
-{{/* utility strings — keep each on ONE line */}}
+{{/* Predefined utility class strings for consistent styling */}}
 {{ $input := "flex-1 rounded-lg bg-zinc-100 dark:bg-zinc-800 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--accent)]" }}
 {{ $btn   := "px-4 py-2 rounded-lg bg-[var(--accent)] text-white shrink-0" }}
 {{ $card  := "bg-white dark:bg-zinc-900 rounded-2xl shadow shadow-zinc-200 dark:shadow-zinc-900/40 p-5 sm:p-6 space-y-3" }}
 {{ $title := "font-semibold text-base sm:text-lg" }}
+{{ $chip  := "px-3 py-1.5 text-xs font-medium border border-zinc-300 dark:border-zinc-700 rounded-full bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition" }}
 
-<!-- Weight -->
+<!-- Weight card -->
 <div class="{{ $card }}">
   <h2 class="{{ $title }}">Weight (kg)</h2>
   <form hx-post="/log" hx-target="#summary" hx-swap="outerHTML" class="flex gap-2">
-    <input type="hidden" name="date" value="{{ .Pivot.Format "2006-01-02" }}">
     <input name="weight_kg" type="number" step="0.1" placeholder="67.8" class="{{ $input }}" required>
     <button class="{{ $btn }}">Save</button>
   </form>
 </div>
 
-<!-- Mood -->
+<!-- Mood card -->
 <div class="{{ $card }}">
-  <h2 class="{{ $title }}">Mood (1-10)</h2>
+  <h2 class="{{ $title }}">Mood (1–10)</h2>
   <form hx-post="/log" hx-target="#summary" hx-swap="outerHTML" class="flex gap-2">
-    <input type="hidden" name="date" value="{{ .Pivot.Format "2006-01-02" }}">
     <input name="mood" type="number" min="1" max="10" placeholder="7" class="{{ $input }}">
     <button class="{{ $btn }}">Save</button>
   </form>
 </div>
 
-<!-- Sleep -->
+<!-- Sleep card -->
 <div class="{{ $card }}">
   <h2 class="{{ $title }}">Sleep (min)</h2>
   <form hx-post="/log" hx-target="#summary" hx-swap="outerHTML" class="flex gap-2">
-    <input type="hidden" name="date" value="{{ .Pivot.Format "2006-01-02" }}">
     <input name="sleep_min" type="number" min="0" placeholder="480" class="{{ $input }}">
     <button class="{{ $btn }}">Save</button>
   </form>
 </div>
 
-<!-- Food -->
+<!-- Food entry card -->
 <div class="{{ $card }}">
   <h2 class="{{ $title }}">Add Food</h2>
-
+  <!-- Quick-add chips for frequent foods -->
+  {{ if .QuickAdd }}
+  <div class="flex flex-wrap gap-2 mb-2">
+    {{ range .QuickAdd }}
+    <form hx-post="/food" hx-target="#foodList" hx-swap="outerHTML" class="inline">
+      <input type="hidden" name="calories" value="{{ .Calories }}">
+      <input type="hidden" name="note" value="{{ .Note }}">
+      <button type="submit" class="{{ $chip }}">
+        {{ if .Note }}{{ .Note }} ({{ .Calories }} kcal){{ else }}{{ .Calories }} kcal{{ end }}
+      </button>
+    </form>
+    {{ end }}
+  </div>
+  {{ end }}
+  <!-- Manual food entry form -->
   <form hx-post="/food" hx-target="#foodList" hx-swap="outerHTML" class="space-y-3">
-    <input type="hidden" name="date" value="{{ $.Pivot.Format "2006-01-02" }}">
-
     <div class="flex gap-2">
       <input name="calories" type="number" min="0" placeholder="kcal" class="{{ $input }}" required>
       <button class="{{ $btn }}">Save</button>
     </div>
-
     <input name="note" type="text" placeholder="Optional note…" class="{{ $input }} w-full">
   </form>
-
-  <!-- quick-add chips -->
-  <div class="flex flex-wrap gap-2 pt-2">
-    {{ range $.Quick }}
-      <button
-        type="button"
-        hx-post="/food"
-        hx-target="#foodList"
-        hx-swap="outerHTML"
-        hx-vals='{"date":"{{ $.Pivot.Format "2006-01-02" }}","calories":"{{ .Calories }}","note":"{{ if .Note }}{{ .Note }}{{ end }}"}'
-        class="text-xs rounded-full bg-zinc-200 dark:bg-zinc-700 px-3 py-1 hover:bg-zinc-300 dark:hover:bg-zinc-600">
-        {{ .Calories }}{{ if .Note }} — {{ .Note }}{{ end }}
-      </button>
-    {{ end }}
-  </div>
 </div>
+

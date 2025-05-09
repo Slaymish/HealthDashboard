@@ -4,49 +4,47 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1">
 
-  <!-- Tailwind CDN – make sure dark-mode is class-based BEFORE the script loads -->
+  <!-- Tailwind CDN – dark mode uses class strategy -->
   <script>
-    tailwind = {};           /* create the global */
-    tailwind.config = { darkMode: 'class' };
+    tailwind = {}; tailwind.config = { darkMode: 'class' };
   </script>
   <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
 
   <title>HealthDash</title>
 
-  <!-- theme toggle -->
+  <!-- theme toggle script -->
   <script>
-	(() => {
-	  const root = document.documentElement;
-	  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-	  const saved      = localStorage.getItem('theme');
-	  if (saved === 'dark' || (!saved && prefersDark)) root.classList.add('dark');
+    (() => {
+      const root = document.documentElement;
+      const apply = d => root.classList.toggle('dark', d);
+      const stored = localStorage.getItem('theme');
+      apply(stored ? stored === 'dark'
+                   : matchMedia('(prefers-color-scheme: dark)').matches);
+      window.toggleTheme = () => {
+        const darkNow = !root.classList.contains('dark');
+        apply(darkNow);
+        localStorage.setItem('theme', darkNow ? 'dark' : 'light');
+      };
+    })();
+  </script>
 
-	  window.toggleTheme = () => {
-	    root.classList.toggle('dark');
-	    localStorage.setItem('theme', root.classList.contains('dark') ? 'dark' : 'light');
-	  };
-	})();
-</script>
   <style>
-    :root      { --accent:#14b8a6 }
-    .dark      { --accent:#22d3ee }
-    ::selection{ background:var(--accent);color:#fff }
+    :root      { --accent: #14b8a6; }         /* teal-500 for light mode */
+    .dark      { --accent: #22d3ee; }         /* cyan-400 for dark mode */
+    ::selection{ background: var(--accent); color: #fff; }
   </style>
 </head>
 
-<body class="bg-zinc-100 text-zinc-800 dark:bg-zinc-950 dark:text-zinc-100
-             min-h-screen flex flex-col">
+<body class="bg-zinc-100 text-zinc-800 dark:bg-zinc-950 dark:text-zinc-100 min-h-screen flex flex-col">
 
-  <!-- header -->
+  <!-- Header -->
   <header class="border-b border-zinc-200 dark:border-zinc-800">
     <div class="max-w-5xl mx-auto px-4 py-3 flex justify-between items-center">
       <h1 class="text-xl sm:text-2xl font-bold flex items-center gap-2">
         <span class="text-[1.4rem] sm:text-[1.6rem]">🩺</span> Health&nbsp;Dashboard
       </h1>
-
       <button onclick="toggleTheme()"
-              class="px-3 py-1.5 sm:py-2 rounded-lg text-sm border
-                     border-zinc-300 dark:border-zinc-700
+              class="px-3 py-1.5 sm:py-2 rounded-lg text-sm border border-zinc-300 dark:border-zinc-700
                      hover:bg-zinc-200 dark:hover:bg-zinc-800 transition">
         <span class="hidden dark:inline">☀️ Light</span>
         <span class="inline dark:hidden">🌙 Dark</span>
@@ -64,7 +62,22 @@
 
   <script src="https://unpkg.com/htmx.org@1.9.10"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-
+  <!-- Custom script: auto-scroll behavior for panels -->
+  <script>
+    document.body.addEventListener('htmx:afterSwap', (e) => {
+      if (e.detail.target.id === 'foodList') {
+        // After food list updates, scroll it to bottom
+        e.detail.target.scrollTop = e.detail.target.scrollHeight;
+      }
+    });
+    document.addEventListener('DOMContentLoaded', () => {
+      const summaryEl = document.getElementById('summary');
+      if (summaryEl) {
+        // On page load, scroll summary panel so current day is visible
+        summaryEl.scrollTop = summaryEl.scrollHeight;
+      }
+    });
+  </script>
 </body>
 </html>
 

@@ -1,43 +1,28 @@
 {{ template "layout.tmpl" . }}
 
 {{ define "content" }}
-
-<form hx-boost="false"        
-      class="mb-6 flex justify-end"
-      method="get">
-  <label class="mr-2 font-medium">Date:</label>
-  <input type="date" name="d"
-         value="{{ .Pivot.Format "2006-01-02" }}"
-         onchange="this.form.submit()" 
-         class="rounded bg-zinc-100 dark:bg-zinc-800 px-3 py-1.5 text-sm
-                focus:outline-none focus:ring-2 focus:ring-[var(--accent)]">
-</form>
-
-
-<div class="grid gap-6 sm:gap-8 md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
-  <!-- forms -->
+<div class="grid gap-6 sm:gap-8 md:grid-cols-3">
+  <!-- Left column: input cards -->
   <div class="space-y-6 md:col-span-1">
     {{ template "cards.tmpl" . }}
   </div>
 
-  <!-- tables + charts -->
+  <!-- Right column: data tables and charts -->
   <div class="space-y-8 md:col-span-2">
-    <div id="summary">
-      {{ template "daily_summary.tmpl" . }}
-    </div>
+    <!-- Daily summary table -->
+    {{ template "summary_partial.tmpl" .Summary }}
 
+    <!-- BMI trend chart card -->
     {{ template "bmi_chart.tmpl" . }}
 
-    <div class="bg-white dark:bg-zinc-900 rounded-2xl shadow p-5 sm:p-6"
-         hx-get="/weekly?d={{ .Pivot.Format "2006-01-02" }}"
-         hx-trigger="load every 10m"
-         hx-swap="outerHTML">
+    <!-- Weekly stats card (loads via HTMX) -->
+    <div class="bg-white dark:bg-zinc-900 rounded-2xl shadow shadow-zinc-200 dark:shadow-zinc-900/40 p-5 sm:p-6"
+         hx-get="/weekly" hx-trigger="load every 10m" hx-swap="outerHTML">
       Loading weekly stats…
     </div>
 
-    <div id="foodList">
-      {{ template "food.tmpl" .Food }}
-    </div>
+    <!-- Food entries table -->
+    {{ template "food.tmpl" .Food }}
   </div>
 </div>
 {{ end }}
