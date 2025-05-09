@@ -1,6 +1,8 @@
 module HealthDashboard
 
-go 1.24.2
+go 1.21
+
+toolchain go1.22.3
 
 require (
 	github.com/jackc/pgx/v5 v5.7.4

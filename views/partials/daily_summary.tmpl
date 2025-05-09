@@ -1,36 +1,59 @@
-<div class="overflow-x-auto rounded-2xl shadow
-            shadow-zinc-200 dark:shadow-zinc-900/40">
-  <table class="w-full text-sm border-collapse">
-    <thead class="sticky top-0 backdrop-blur
-                 bg-white/70 dark:bg-zinc-950/70">
+<div class="rounded-2xl shadow bg-white dark:bg-zinc-900
+            max-h-[28rem] overflow-y-auto" id="scrollPanel">      <!-- NEW fixed height -->
+  <table class="w-full text-sm">
+
+    <thead class="sticky top-0 backdrop-blur bg-white/80 dark:bg-zinc-900/80">
       <tr class="border-b border-zinc-200 dark:border-zinc-800 text-left">
         <th class="py-3 px-4">Date</th>
         <th class="px-4">Weight</th>
         <th class="px-4">kcal est / bud</th>
         <th class="px-4">Mood</th>
         <th class="px-4">Motivation</th>
-        <th class="px-4">Activity</th>
-        <th class="px-4">Sleep</th>
       </tr>
     </thead>
+
     <tbody>
-      {{ range $i, $row := . }}
-      <tr class="{{ if mod $i 2 }}bg-zinc-50 dark:bg-zinc-900{{ end }}
-                 hover:bg-zinc-100 dark:hover:bg-zinc-800
-                 border-b border-zinc-100 dark:border-zinc-800">
-        <td class="py-3 px-4 whitespace-nowrap">{{ $row.LogDate.Format "02 Jan" }}</td>
-        <td class="px-4 tabular-nums">{{ fmtF2 $row.WeightKg }}kg</td>
-        <td class="px-4 tabular-nums">
-          {{ if $row.KcalEstimated }}{{ fmtInt $row.KcalEstimated }}{{ end }}
-          {{ if $row.KcalBudgeted }} / {{ fmtInt $row.KcalBudgeted }}{{ end }}
-        </td>
-        <td class="px-4 tabular-nums">{{ fmtInt $row.Mood }}</td>
-        <td class="px-4 tabular-nums">{{ fmtInt $row.Motivation }}</td>
-        <td class="px-4 tabular-nums">{{ fmtInt $row.TotalActivityMin }}</td>
-        <td class="px-4 tabular-nums">{{ fmtInt $row.SleepDurationMins }}</td>
-      </tr>
-      {{ end }}
-    </tbody>
+	  {{ if eq (len .Summary) 0 }}
+	    <tr><td class="p-4 text-zinc-500" colspan="5">No data for this window</td></tr>
+	  {{ end }}
+
+	  {{ range $i, $row := .Summary }}
+	    {{ $isPivot := eq ($row.LogDate.Format "2006-01-02")
+                    ($.Pivot.Format "2006-01-02") }}
+	<tr id="{{ if $isPivot }}pivotRow{{ end }}"
+		class="{{ if $isPivot }} bg-[var(--accent)]/40 text-zinc-900 dark:text-zinc-100 font-semibold
+               {{ else if mod $i 2 }} bg-zinc-50 dark:bg-zinc-900 {{ end }}
+               hover:bg-zinc-100 dark:hover:bg-zinc-800
+               border-b border-zinc-100 dark:border-zinc-800">
+	      <td class="py-3 px-4">{{ $row.LogDate.Format "02 Jan" }}</td>
+	      <td class="px-4 tabular-nums">{{ fmtF2 $row.WeightKg }}kg</td>
+	      <td class="px-4 tabular-nums">
+		{{ if $row.KcalEstimated }}{{ fmtInt $row.KcalEstimated }}{{ end }}
+		{{ if $row.KcalBudgeted  }} / {{ fmtInt $row.KcalBudgeted  }}{{ end }}
+	      </td>
+	      <td class="px-4 tabular-nums">{{ fmtInt $row.Mood }}</td>
+	      <td class="px-4 tabular-nums">{{ fmtInt $row.Motivation }}</td>
+	    </tr>
+	  {{ end }}
+	</tbody>
   </table>
 </div>
 
+<script>
+function scrollPivot () {
+  const row = document.getElementById('pivotRow');
+  if (!row) return;
+
+  const box = document.getElementById('scrollPanel');
+  if (!box) return;
+
+  // centre row *inside the panel only*
+  const offset = row.offsetTop - box.offsetTop - box.clientHeight / 2 + row.clientHeight / 2;
+  box.scrollTop = offset;          // ← no smooth scroll on page, just the panel
+}
+
+document.addEventListener('DOMContentLoaded', scrollPivot);
+document.body.addEventListener('htmx:afterSwap', e => {
+  if (e.target.id === 'summary') scrollPivot();
+});
+</script>

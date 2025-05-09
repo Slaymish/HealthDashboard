@@ -1,0 +1,9 @@
+{{/* expects .Summary and .Pivot */}}
+
+<div class="rounded-2xl shadow bg-white dark:bg-zinc-900
+            max-h-[28rem] overflow-y-auto" id="scrollPanel">
+  {{ template "daily_summary_table" . }}
+</div>
+
+<script hx-swap-oob="true">scrollPivot()</script>
+
