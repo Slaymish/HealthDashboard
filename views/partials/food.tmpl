@@ -5,6 +5,7 @@
         <th class="py-3 px-4">Time</th>
         <th class="px-4">Calories</th>
         <th class="px-4">Note</th>
+        <th class="px-4"><!-- delete --></th>  
       </tr>
     </thead>
     <tbody>
@@ -18,6 +19,14 @@
         <td class="py-3 px-4 whitespace-nowrap">{{ $f.CreatedAt.Format "15:04" }}</td>
         <td class="px-4 tabular-nums">{{ $f.Calories }}</td>
         <td class="px-4">{{ if $f.Note }}{{ $f.Note }}{{ else }}–{{ end }}</td>
+        <td class="px-4 text-right">
+          <button
+            hx-delete="/food?id={{ $f.ID }}"
+            hx-target="#foodList"
+            hx-swap="outerHTML"
+            class="text-red-500 hover:text-red-700 px-2"
+          >&times;</button>
+        </td>
       </tr>
       {{ end }}
     </tbody>

@@ -38,7 +38,9 @@ type DailySummary struct {
 	SleepDuration    *int
 }
 
+// in your data structs
 type FoodEntry struct {
+	ID        int // ← new
 	CreatedAt time.Time
 	Calories  int
 	Note      sql.NullString
@@ -50,25 +52,24 @@ type QuickAddItem struct {
 }
 
 type BMI struct {
-	LogDate time.Time  `json:"date"`
-	Value   float64    `json:"bmi"`
+	LogDate time.Time `json:"date"`
+	Value   float64   `json:"bmi"`
 }
 
 type Weekly struct {
-	WeekStart time.Time
-	AvgWeight *float64
-	AvgMood   *float64
-	TotalKcal *int
+	WeekStart      time.Time
+	AvgWeight      *float64
+	TotalEstimated *int
+	TotalBudgeted  *int
+	TotalDeficit   *int
 }
 
 type PageData struct {
-    Pivot    time.Time        // new
-    Summary  []DailySummary
-    Food     []FoodEntry
-    QuickAdd []QuickAddItem
+	Pivot    time.Time // new
+	Summary  []DailySummary
+	Food     []FoodEntry
+	QuickAdd []QuickAddItem
 }
-
-
 
 /* ───────────────────── Helpers for templates ───────────────────── */
 
@@ -85,8 +86,8 @@ func fmtInt(p *int) string {
 	return fmt.Sprintf("%d", *p)
 }
 func safeHTML(s string) template.HTML { return template.HTML(s) }
-func mod(a, b int) int               { return a % b }
-func todayStr() string               { return time.Now().Format("2006-01-02") }
+func mod(a, b int) int                { return a % b }
+func todayStr() string                { return time.Now().Format("2006-01-02") }
 
 /* ───────────────────── Core app ───────────────────── */
 
@@ -149,16 +150,16 @@ func main() {
 
 func (a *App) fetchSummary(ctx context.Context, pivot time.Time, span int) ([]DailySummary, error) {
 	start := pivot.AddDate(0, 0, -span)
-	end   := pivot.AddDate(0, 0,  span)
+	end := pivot.AddDate(0, 0, span)
 
-    rows, err := a.db.Query(ctx, `
+	rows, err := a.db.Query(ctx, `
         SELECT log_date, weight_kg, kcal_estimated, kcal_budgeted,
                mood, motivation, total_activity_min, sleep_duration
           FROM v_daily_summary
          WHERE user_id = 1
            AND log_date BETWEEN $1 AND $2
          ORDER BY log_date`,
-        start, end)
+		start, end)
 	if err != nil {
 		return nil, err
 	}
@@ -167,8 +168,8 @@ func (a *App) fetchSummary(ctx context.Context, pivot time.Time, span int) ([]Da
 	var out []DailySummary
 	for rows.Next() {
 		var (
-			d                             DailySummary
-			weight                        sql.NullFloat64
+			d                              DailySummary
+			weight                         sql.NullFloat64
 			est, bud, mood, motiv, act, sl sql.NullInt32
 		)
 		if err := rows.Scan(
@@ -176,13 +177,34 @@ func (a *App) fetchSummary(ctx context.Context, pivot time.Time, span int) ([]Da
 			&mood, &motiv, &act, &sl); err != nil {
 			return nil, err
 		}
-		if weight.Valid { v := weight.Float64; d.WeightKg = &v }
-		if est.Valid    { v := int(est.Int32); d.KcalEstimated = &v }
-		if bud.Valid    { v := int(bud.Int32); d.KcalBudgeted  = &v }
-		if mood.Valid   { v := int(mood.Int32); d.Mood         = &v }
-		if motiv.Valid  { v := int(motiv.Int32); d.Motivation  = &v }
-		if act.Valid    { v := int(act.Int32); d.TotalActivityMin = &v }
-		if sl.Valid     { v := int(sl.Int32);  d.SleepDuration    = &v }
+		if weight.Valid {
+			v := weight.Float64
+			d.WeightKg = &v
+		}
+		if est.Valid {
+			v := int(est.Int32)
+			d.KcalEstimated = &v
+		}
+		if bud.Valid {
+			v := int(bud.Int32)
+			d.KcalBudgeted = &v
+		}
+		if mood.Valid {
+			v := int(mood.Int32)
+			d.Mood = &v
+		}
+		if motiv.Valid {
+			v := int(motiv.Int32)
+			d.Motivation = &v
+		}
+		if act.Valid {
+			v := int(act.Int32)
+			d.TotalActivityMin = &v
+		}
+		if sl.Valid {
+			v := int(sl.Int32)
+			d.SleepDuration = &v
+		}
 
 		out = append(out, d)
 	}
@@ -191,12 +213,12 @@ func (a *App) fetchSummary(ctx context.Context, pivot time.Time, span int) ([]Da
 
 func (a *App) fetchFood(ctx context.Context) ([]FoodEntry, error) {
 	rows, err := a.db.Query(ctx, `
-		SELECT e.created_at, e.calories, e.note
-		  FROM daily_calorie_entries e
-		  JOIN daily_logs l ON l.log_id = e.log_id
-		 WHERE l.user_id = 1
-		   AND l.log_date = CURRENT_DATE
-		 ORDER BY e.created_at`)
+		SELECT e.entry_id, e.created_at, e.calories, e.note
+		FROM daily_calorie_entries e
+		JOIN daily_logs l ON l.log_id = e.log_id
+		WHERE l.user_id = 1
+		AND l.log_date = CURRENT_DATE
+		ORDER BY e.created_at`)
 	if err != nil {
 		return nil, err
 	}
@@ -205,7 +227,7 @@ func (a *App) fetchFood(ctx context.Context) ([]FoodEntry, error) {
 	var out []FoodEntry
 	for rows.Next() {
 		var f FoodEntry
-		if err := rows.Scan(&f.CreatedAt, &f.Calories, &f.Note); err != nil {
+		if err := rows.Scan(&f.ID, &f.CreatedAt, &f.Calories, &f.Note); err != nil {
 			return nil, err
 		}
 		out = append(out, f)
@@ -241,36 +263,44 @@ func (a *App) fetchQuickAdd(ctx context.Context) ([]QuickAddItem, error) {
 /* ───────────────────── Handlers ───────────────────── */
 
 func (a *App) handleIndex(w http.ResponseWriter, r *http.Request) {
-    ctx := r.Context()
+	ctx := r.Context()
 
-    pivot := time.Now()
-    if qs := r.URL.Query().Get("d"); qs != "" {
-        if p, err := time.Parse("2006-01-02", qs); err == nil {
-            pivot = p
-        }
-    }
+	pivot := time.Now()
+	if qs := r.URL.Query().Get("d"); qs != "" {
+		if p, err := time.Parse("2006-01-02", qs); err == nil {
+			pivot = p
+		}
+	}
 
-    summary, err := a.fetchSummary(ctx, pivot, 3)
+	summary, err := a.fetchSummary(ctx, pivot, 3)
 
-    if err != nil { http.Error(w, err.Error(), 500); return }
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
 
-    foods, _  := a.fetchFood(ctx)      // today’s food; unchanged
-    quick, _  := a.fetchQuickAdd(ctx)
+	foods, _ := a.fetchFood(ctx) // today’s food; unchanged
+	quick, _ := a.fetchQuickAdd(ctx)
 
-    data := PageData{
-        Pivot:    pivot,
-        Summary:  summary,
-        Food:     foods,
-        QuickAdd: quick,
-    }
-    _ = a.tpl.ExecuteTemplate(w, "index.tmpl", data)
+	data := PageData{
+		Pivot:    pivot,
+		Summary:  summary,
+		Food:     foods,
+		QuickAdd: quick,
+	}
+	_ = a.tpl.ExecuteTemplate(w, "index.tmpl", data)
 }
-
 
 func (a *App) handleLog(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	if r.Method != http.MethodPost { http.Error(w, "method", 405); return }
-	if err := r.ParseForm(); err != nil { http.Error(w, "bad form", 400); return }
+	if r.Method != http.MethodPost {
+		http.Error(w, "method", 405)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad form", 400)
+		return
+	}
 
 	userID := 1
 	_, _ = a.db.Exec(ctx, `INSERT INTO daily_logs (user_id, log_date)
@@ -279,11 +309,15 @@ func (a *App) handleLog(w http.ResponseWriter, r *http.Request) {
 
 	update := func(col, formKey string) {
 		val := r.FormValue(formKey)
-		if val == "" { return }
+		if val == "" {
+			return
+		}
 		_, err := a.db.Exec(ctx, fmt.Sprintf(
 			`UPDATE daily_logs SET %s = $1 WHERE user_id = $2 AND log_date = CURRENT_DATE`, col),
 			val, userID)
-		if err != nil { log.Printf("update %s: %v", col, err) }
+		if err != nil {
+			log.Printf("update %s: %v", col, err)
+		}
 	}
 	update("weight_kg", "weight_kg")
 	update("mood", "mood")
@@ -299,13 +333,20 @@ func (a *App) handleLog(w http.ResponseWriter, r *http.Request) {
 
 func (a *App) handleFood(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	if r.Method != http.MethodPost { http.Error(w, "method", 405); return }
-	if err := r.ParseForm(); err != nil { http.Error(w, "bad form", 400); return }
+	if r.Method != http.MethodPost {
+		http.Error(w, "method", 405)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad form", 400)
+		return
+	}
 
 	calStr := r.FormValue("calories")
 	cal, err := strconv.Atoi(calStr)
 	if err != nil || cal < 0 {
-		http.Error(w, "calories", 400); return
+		http.Error(w, "calories", 400)
+		return
 	}
 	note := r.FormValue("note")
 	userID := 1
@@ -317,25 +358,29 @@ func (a *App) handleFood(w http.ResponseWriter, r *http.Request) {
 		ON CONFLICT (user_id, log_date) DO UPDATE
 		SET log_date = EXCLUDED.log_date
 		RETURNING log_id`, userID).Scan(&logID); err != nil {
-		http.Error(w, err.Error(), 500); return
+		http.Error(w, err.Error(), 500)
+		return
 	}
 
 	_, err = a.db.Exec(ctx, `
 		INSERT INTO daily_calorie_entries (log_id, calories, note)
 		VALUES ($1, $2, NULLIF($3,''))`, logID, cal, note)
-	if err != nil { http.Error(w, err.Error(), 500); return }
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
 
 	if r.Header.Get("HX-Request") == "" {
-		http.Redirect(w, r, "/", 303); return
+		http.Redirect(w, r, "/", 303)
+		return
 	}
 
 	foods, _ := a.fetchFood(ctx)
 	sum, _ := a.fetchSummary(ctx, time.Now(), 3)
 
-
 	var foodHTML, sumHTML strings.Builder
 	_ = a.tpl.ExecuteTemplate(&foodHTML, "food.tmpl", foods)
-	_ = a.tpl.ExecuteTemplate(&sumHTML,  "summary_partial.tmpl", sum)
+	_ = a.tpl.ExecuteTemplate(&sumHTML, "summary_partial.tmpl", sum)
 
 	summaryFrag := strings.Replace(sumHTML.String(),
 		`id="summary"`, `id="summary" hx-swap-oob="outerHTML"`, 1)
@@ -345,32 +390,57 @@ func (a *App) handleFood(w http.ResponseWriter, r *http.Request) {
 
 func (a *App) handleBMI(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	rows, err := a.db.Query(ctx, `
-		SELECT log_date, bmi FROM v_bmi
-		  WHERE user_id = 1
-		  ORDER BY log_date`)
-	if err != nil { http.Error(w, err.Error(), 500); return }
+	const sql = `
+    SELECT d.dt AS log_date, b.bmi AS value
+    FROM generate_series(
+       CURRENT_DATE - INTERVAL '29 days',
+       CURRENT_DATE,
+       '1 day'
+    ) AS d(dt)
+    LEFT JOIN v_bmi AS b
+      ON b.log_date = d.dt AND b.user_id = $1
+    ORDER BY d.dt;
+  `
+	rows, err := a.db.Query(ctx, sql, 1)
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
 	defer rows.Close()
-	var series []BMI
+
+	type BMI struct {
+		LogDate time.Time `json:"date"`
+		Value   *float64  `json:"bmi"`
+	}
+
+	series := make([]BMI, 0, 30)
 	for rows.Next() {
 		var b BMI
-		if err := rows.Scan(&b.LogDate, &b.Value); err == nil {
-			series = append(series, b)
+		if err := rows.Scan(&b.LogDate, &b.Value); err != nil {
+			http.Error(w, err.Error(), 500)
+			return
 		}
+		series = append(series, b)
 	}
+
+	log.Println(series)
+
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(series)
+	json.NewEncoder(w).Encode(series)
 }
 
 func (a *App) handleWeekly(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	var wk Weekly
 	err := a.db.QueryRow(ctx, `
-		SELECT week_start, avg_weight, avg_mood, total_kcal_est
+		SELECT week_start, avg_weight, total_budgeted, total_estimated, total_deficit
 		  FROM v_weekly_stats
 		 WHERE user_id = 1
 		   AND week_start = date_trunc('week', CURRENT_DATE)`).
-		Scan(&wk.WeekStart, &wk.AvgWeight, &wk.AvgMood, &wk.TotalKcal)
-	if err != nil { http.Error(w, err.Error(), 500); return }
+		Scan(&wk.WeekStart, &wk.AvgWeight, &wk.TotalBudgeted, &wk.TotalEstimated, &wk.TotalDeficit)
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
 	_ = a.tpl.ExecuteTemplate(w, "weekly.tmpl", wk)
 }

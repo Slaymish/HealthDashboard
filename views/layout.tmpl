@@ -14,19 +14,29 @@
 
   <!-- theme toggle script -->
   <script>
-    (() => {
-      const root = document.documentElement;
-      const apply = d => root.classList.toggle('dark', d);
+    (function() {
+      const html = document.documentElement;
       const stored = localStorage.getItem('theme');
-      apply(stored ? stored === 'dark'
-                   : matchMedia('(prefers-color-scheme: dark)').matches);
+      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      // Determine initial state
+      const isDark = stored
+        ? (stored === 'dark')
+        : prefersDark;
+      // Apply it
+      if (isDark) html.classList.add('dark');
+      else        html.classList.remove('dark');
+      console.log('[Theme] initial:', isDark ? 'dark' : 'light');
+
+      // Expose toggle
       window.toggleTheme = () => {
-        const darkNow = !root.classList.contains('dark');
-        apply(darkNow);
-        localStorage.setItem('theme', darkNow ? 'dark' : 'light');
+        html.classList.toggle('dark');
+        const nowDark = html.classList.contains('dark');
+        localStorage.setItem('theme', nowDark ? 'dark' : 'light');
+        console.log('[Theme] toggled:', nowDark ? 'dark' : 'light');
       };
     })();
   </script>
+
 
   <style>
     :root      { --accent: #14b8a6; }         /* teal-500 for light mode */
@@ -61,7 +71,9 @@
   </footer>
 
   <script src="https://unpkg.com/htmx.org@1.9.10"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
+
   <!-- Custom script: auto-scroll behavior for panels -->
   <script>
     document.body.addEventListener('htmx:afterSwap', (e) => {
