@@ -1,0 +1,395 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "HealthDashboard API",
+    "version": "1.0.0",
+    "description": "API for tracking health and wellness metrics including weight, calories, mood, sleep, and activity."
+  },
+  "servers": [
+    {
+      "url": "https://raspberrypi.taildb558.ts.net",
+      "description": "Local instance of HealthDashboard on Raspberry Pi"
+    }
+  ],
+  "paths": {
+    "/api/bmi": {
+      "get": {
+        "summary": "Retrieve 30-day BMI data",
+        "operationId": "getBMI",
+        "responses": {
+          "200": {
+            "description": "BMI data retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/BMI"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Failed to retrieve BMI data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/log/weight": {
+      "post": {
+        "summary": "Log weight for a specific date",
+        "operationId": "logWeight",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WeightLogRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Weight logged successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid weight data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/log/calorie": {
+      "post": {
+        "summary": "Log calorie intake",
+        "operationId": "logCalorie",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CalorieLogRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Calorie entry logged successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid calorie entry data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/log/cardio": {
+      "post": {
+        "summary": "Log cardio activity duration",
+        "operationId": "logCardio",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CardioLogRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Cardio activity logged successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid cardio duration data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/log/mood": {
+      "post": {
+        "summary": "Log mood for a specific date",
+        "operationId": "logMood",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MoodLogRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Mood logged successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid mood data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/summary/daily": {
+      "get": {
+        "summary": "Get daily summary of metrics",
+        "operationId": "getDailySummary",
+        "parameters": [
+          {
+            "name": "date",
+            "in": "query",
+            "required": false,
+            "description": "Date in YYYY-MM-DD format. Defaults to today.",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Daily summary retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DailySummary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error retrieving daily summary",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/calories/today": {
+      "get": {
+        "summary": "Get total calories for today",
+        "operationId": "getTodayCalories",
+        "responses": {
+          "200": {
+            "description": "Today's calorie total retrieved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaloriesTodayResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error retrieving today's calories",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/summary/weekly": {
+      "get": {
+        "summary": "Get weekly summary of metrics",
+        "operationId": "getWeeklySummary",
+        "parameters": [
+          {
+            "name": "start_date",
+            "in": "query",
+            "required": false,
+            "description": "Start date in YYYY-MM-DD format. Defaults to current week's start.",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Weekly summary retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Weekly"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error retrieving weekly summary",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ErrorResponse": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean", "example": false },
+          "message": { "type": "string" }
+        }
+      },
+      "SuccessResponse": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean", "example": true },
+          "message": { "type": "string" }
+        }
+      },
+      "WeightLogRequest": {
+        "type": "object",
+        "required": ["weight_kg"],
+        "properties": {
+          "weight_kg": { "type": "number", "format": "double", "description": "Weight in kilograms." },
+          "date": { "type": "string", "format": "date", "description": "Date of weight log in YYYY-MM-DD format. Defaults to today." }
+        }
+      },
+      "CalorieLogRequest": {
+        "type": "object",
+        "required": ["calories"],
+        "properties": {
+          "calories": { "type": "integer", "description": "Number of calories." },
+          "note": { "type": "string", "description": "Optional note for the calorie entry." },
+          "date": { "type": "string", "format": "date", "description": "Date of calorie log in YYYY-MM-DD format. Defaults to today." }
+        }
+      },
+      "CardioLogRequest": {
+        "type": "object",
+        "required": ["duration_min"],
+        "properties": {
+          "duration_min": { "type": "integer", "description": "Duration of cardio activity in minutes." },
+          "date": { "type": "string", "format": "date", "description": "Date of cardio log in YYYY-MM-DD format. Defaults to today." }
+        }
+      },
+      "MoodLogRequest": {
+        "type": "object",
+        "required": ["mood"],
+        "properties": {
+          "mood": { "type": "integer", "description": "Mood rating (e.g., 1-5)." },
+          "date": { "type": "string", "format": "date", "description": "Date of mood log in YYYY-MM-DD format. Defaults to today." }
+        }
+      },
+      "BMI": {
+        "type": "object",
+        "properties": {
+          "date": { "type": "string", "format": "date-time", "description": "Date and time of the BMI reading." },
+          "bmi": { "type": "number", "format": "double", "nullable": true, "description": "Body Mass Index value." }
+        }
+      },
+      "DailySummary": {
+        "type": "object",
+        "properties": {
+          "log_date": { "type": "string", "format": "date-time", "description": "Date of the summary." },
+          "weight_kg": { "type": "number", "format": "double", "nullable": true, "description": "Weight in kilograms." },
+          "kcal_estimated": { "type": "integer", "nullable": true, "description": "Estimated calories burned." },
+          "kcal_budgeted": { "type": "integer", "nullable": true, "description": "Budgeted calorie intake." },
+          "mood": { "type": "integer", "nullable": true, "description": "Mood rating." },
+          "motivation": { "type": "integer", "nullable": true, "description": "Motivation level." },
+          "total_activity_min": { "type": "integer", "nullable": true, "description": "Total minutes of activity." },
+          "sleep_duration": { "type": "integer", "nullable": true, "description": "Duration of sleep in minutes." }
+        }
+      },
+      "CaloriesTodayResponse": {
+        "type": "object",
+        "properties": {
+          "date": { "type": "string", "format": "date", "description": "Current date in YYYY-MM-DD format." },
+          "total_calories": { "type": "integer", "description": "Total calories logged for the day." }
+        }
+      },
+      "Weekly": {
+        "type": "object",
+        "properties": {
+          "week_start": { "type": "string", "format": "date-time", "description": "Start date of the week." },
+          "avg_weight": { "type": "number", "format": "double", "nullable": true, "description": "Average weight for the week." },
+          "total_estimated": { "type": "integer", "nullable": true, "description": "Total estimated calories burned for the week." },
+          "total_budgeted": { "type": "integer", "nullable": true, "description": "Total budgeted calorie intake for the week." },
+          "total_deficit": { "type": "integer", "nullable": true, "description": "Total calorie deficit for the week." }
+        }
+      }
+    }
+  }
+}
