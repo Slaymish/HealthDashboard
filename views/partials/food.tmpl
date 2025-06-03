@@ -18,7 +18,7 @@
       <tr class="{{ if mod $i 2 }}bg-zinc-50 dark:bg-zinc-800{{ end }} hover:bg-zinc-100 dark:hover:bg-zinc-700 border-b border-zinc-100 dark:border-zinc-800">
         <td class="py-3 px-4 whitespace-nowrap">{{ $f.CreatedAt.Format "15:04" }}</td>
         <td class="px-4 tabular-nums">{{ $f.Calories }}</td>
-        <td class="px-4">{{ if $f.Note }}{{ $f.Note }}{{ else }}–{{ end }}</td>
+        <td class="px-4">{{ formatNote $f.Note }}</td>
         <td class="px-4 text-right">
           <button
             hx-delete="/food?id={{ $f.ID }}"
