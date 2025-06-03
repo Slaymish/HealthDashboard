@@ -6,9 +6,7 @@
       <th class="px-4">kcal est / bud</th>
       <th class="px-4">Net Kcal</th>
       <th class="px-4">Mood</th>
-      <th class="px-4">Motivation</th>
       <th class="px-4">Activity</th>
-      <th class="px-4">Sleep</th>
     </tr>
   </thead>
   <tbody>
@@ -31,9 +29,7 @@
         {{ end }}
       </td>
       <td class="px-4 tabular-nums">{{ fmtInt $row.Mood }}</td>
-      <td class="px-4 tabular-nums">{{ fmtInt $row.Motivation }}</td>
       <td class="px-4 tabular-nums">{{ fmtInt $row.TotalActivityMin }}</td>
-      <td class="px-4 tabular-nums">{{ fmtInt $row.SleepDuration }}</td>
     </tr>
     {{ end }}
   </tbody>
