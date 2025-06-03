@@ -42,6 +42,23 @@
     :root      { --accent: #14b8a6; }         /* teal-500 for light mode */
     .dark      { --accent: #22d3ee; }         /* cyan-400 for dark mode */
     ::selection{ background: var(--accent); color: #fff; }
+
+   .dark body {
+     background-color: #09090b; /* zinc-950 */
+     color: #f4f4f5;            /* zinc-100 */
+   }
+
+   /* Default state (light mode): light-icon shown, dark-icon hidden */
+   .light-icon { display: inline !important; }
+   .dark-icon { display: none !important; }
+
+   /* When dark mode is active on html */
+   .dark .dark-icon { display: inline !important; }
+   .dark .light-icon { display: none !important; }
+
+   /* Explicitly for light mode (when html does NOT have .dark) */
+   html:not(.dark) .light-icon { display: inline !important; }
+   html:not(.dark) .dark-icon { display: none !important; }
   </style>
 </head>
 
@@ -56,8 +73,8 @@
       <button onclick="toggleTheme()"
               class="px-3 py-1.5 sm:py-2 rounded-lg text-sm border border-zinc-300 dark:border-zinc-700
                      hover:bg-zinc-200 dark:hover:bg-zinc-800 transition">
-        <span class="hidden dark:inline">☀️ Light</span>
-        <span class="inline dark:hidden">🌙 Dark</span>
+        <span class="light-icon">☀️ Light</span>
+        <span class="dark-icon">🌙 Dark</span>
       </button>
     </div>
   </header>
