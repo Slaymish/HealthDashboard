@@ -143,6 +143,24 @@ type CaloriesTodayResponse struct {
 
 /* ───────────────────── Helpers for templates ───────────────────── */
 
+// FormatNote formats a food log note for display.
+// It handles sql.NullString and a specific string pattern.
+func FormatNote(note sql.NullString) string {
+	if !note.Valid || note.String == "" {
+		return "–"
+	}
+	s := note.String
+	if strings.HasPrefix(s, "{") && strings.HasSuffix(s, " true}") {
+		s = strings.TrimPrefix(s, "{")
+		s = strings.TrimSuffix(s, " true}")
+		if s == "" {
+			return "–"
+		}
+		return s
+	}
+	return s
+}
+
 func fmtF2(p *float64) string {
 	if p == nil {
 		return "–"
@@ -179,11 +197,12 @@ func main() {
 
 	// Define custom functions for use within HTML templates.
 	funcs := template.FuncMap{
-		"fmtF2":    fmtF2,    // Formats a float64 pointer to a string with 1 decimal place, or "–" if nil.
-		"fmtInt":   fmtInt,   // Formats an int pointer to a string, or "–" if nil.
-		"safeHTML": safeHTML, // Allows embedding unescaped HTML.
-		"mod":      mod,      // Modulo operator for template logic.
-		"todayStr": todayStr, // Returns current date as "YYYY-MM-DD".
+		"fmtF2":      fmtF2,    // Formats a float64 pointer to a string with 1 decimal place, or "–" if nil.
+		"fmtInt":     fmtInt,   // Formats an int pointer to a string, or "–" if nil.
+		"safeHTML":   safeHTML, // Allows embedding unescaped HTML.
+		"mod":        mod,      // Modulo operator for template logic.
+		"todayStr":   todayStr, // Returns current date as "YYYY-MM-DD".
+		"formatNote": FormatNote, // Formats food log notes.
 	}
 	// Parse HTML templates from embedded resources.
 	// Includes all .tmpl files in 'views' and 'views/partials'.
