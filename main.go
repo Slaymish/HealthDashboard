@@ -27,6 +27,8 @@ var resources embed.FS
 
 /* ───────────────────── Data structs ───────────────────── */
 
+// DailySummary holds aggregated metrics for a single day.
+// Used in UI for daily and 7-day views, and in API responses.
 type DailySummary struct {
 	LogDate          time.Time `json:"log_date"`
 	WeightKg         *float64  `json:"weight_kg,omitempty"`
@@ -38,7 +40,8 @@ type DailySummary struct {
 	SleepDuration    *int      `json:"sleep_duration,omitempty"`
 }
 
-// in your data structs
+// FoodEntry represents a single food item logged by the user for a specific day.
+// The 'ID' field is used to uniquely identify entries, e.g., for deletion (though not implemented).
 type FoodEntry struct {
 	ID        int // ← new
 	CreatedAt time.Time
@@ -46,16 +49,22 @@ type FoodEntry struct {
 	Note      sql.NullString
 }
 
+// QuickAddItem is used to populate the "Quick Add" food items list.
+// These are derived from frequently logged food items.
 type QuickAddItem struct {
 	Calories int
 	Note     string
 }
 
+// BMI represents a Body Mass Index value for a specific date.
+// Used for the 30-day BMI trend chart.
 type BMI struct {
 	LogDate time.Time `json:"date"`
 	Value   float64   `json:"bmi"`
 }
 
+// Weekly holds summarized weekly statistics.
+// Used for the weekly summary view and API endpoint.
 type Weekly struct {
 	WeekStart      time.Time `json:"week_start"`
 	AvgWeight      *float64  `json:"avg_weight,omitempty"`
@@ -64,59 +73,69 @@ type Weekly struct {
 	TotalDeficit   *int      `json:"total_deficit,omitempty"`
 }
 
+// PageData is the primary data structure passed to HTML templates for rendering views.
+// It aggregates various pieces of data needed for the UI.
 type PageData struct {
-	Pivot    time.Time // new
+	Pivot    time.Time // 'Pivot' date determines the central date for data display, e.g., in 7-day summary.
 	Summary  []DailySummary
 	Food     []FoodEntry
 	QuickAdd []QuickAddItem
 }
 
-// For POST /api/log/weight
+// WeightLogRequest defines the expected JSON payload for logging weight.
+// Date is optional and defaults to the current day if not provided.
 type WeightLogRequest struct {
 	WeightKg float64 `json:"weight_kg"`
 	Date     string  `json:"date,omitempty"` // YYYY-MM-DD, defaults to today
 }
 
+// WeightLogResponse is the standard JSON response for the weight logging API.
 type WeightLogResponse struct {
 	Success bool   `json:"success"`
 	Message string `json:"message"`
 }
 
-// For POST /api/log/calorie
+// CalorieLogRequest defines the expected JSON payload for logging a calorie entry.
+// Date is optional and defaults to the current day.
 type CalorieLogRequest struct {
 	Calories int    `json:"calories"`
 	Note     string `json:"note,omitempty"`
 	Date     string `json:"date,omitempty"` // YYYY-MM-DD, defaults to today
 }
 
+// CalorieLogResponse is the standard JSON response for the calorie logging API.
 type CalorieLogResponse struct {
 	Success bool   `json:"success"`
 	Message string `json:"message"`
 }
 
-// For POST /api/log/cardio
+// CardioLogRequest defines the expected JSON payload for logging cardio activity.
+// Date is optional and defaults to the current day.
 type CardioLogRequest struct {
 	DurationMin int    `json:"duration_min"`
 	Date        string `json:"date,omitempty"` // YYYY-MM-DD, defaults to today
 }
 
+// CardioLogResponse is the standard JSON response for the cardio logging API.
 type CardioLogResponse struct {
 	Success bool   `json:"success"`
 	Message string `json:"message"`
 }
 
-// For POST /api/log/mood
+// MoodLogRequest defines the expected JSON payload for logging mood.
+// Date is optional and defaults to the current day.
 type MoodLogRequest struct {
 	Mood int    `json:"mood"`
 	Date string `json:"date,omitempty"` // YYYY-MM-DD, defaults to today
 }
 
+// MoodLogResponse is a generic JSON response structure used by mood logging and other API endpoints for success/failure messages.
 type MoodLogResponse struct {
 	Success bool   `json:"success"`
 	Message string `json:"message"`
 }
 
-// For GET /api/calories/today
+// CaloriesTodayResponse defines the JSON response for the API endpoint that retrieves total calories for the current day.
 type CaloriesTodayResponse struct {
 	Date          string `json:"date"`
 	TotalCalories int    `json:"total_calories"`
@@ -143,73 +162,93 @@ func todayStr() string                { return time.Now().Format("2006-01-02") }
 /* ───────────────────── Core app ───────────────────── */
 
 type App struct {
-	db  *pgxpool.Pool
-	tpl *template.Template
+	db  *pgxpool.Pool        // db is the PostgreSQL connection pool.
+	tpl *template.Template // tpl stores parsed HTML templates.
 }
 
 func main() {
+	// Load environment variables from .env file (if present).
 	_ = godotenv.Load()
 
+	// Initialize database connection pool.
 	pool, err := pgxpool.New(context.Background(), os.Getenv("DATABASE_URL"))
 	if err != nil {
 		log.Fatalf("pgx pool: %v", err)
 	}
-	defer pool.Close()
+	defer pool.Close() // Ensure the pool is closed when main exits.
 
+	// Define custom functions for use within HTML templates.
 	funcs := template.FuncMap{
-		"fmtF2":    fmtF2,
-		"fmtInt":   fmtInt,
-		"safeHTML": safeHTML,
-		"mod":      mod,
-		"todayStr": todayStr,
+		"fmtF2":    fmtF2,    // Formats a float64 pointer to a string with 1 decimal place, or "–" if nil.
+		"fmtInt":   fmtInt,   // Formats an int pointer to a string, or "–" if nil.
+		"safeHTML": safeHTML, // Allows embedding unescaped HTML.
+		"mod":      mod,      // Modulo operator for template logic.
+		"todayStr": todayStr, // Returns current date as "YYYY-MM-DD".
 	}
+	// Parse HTML templates from embedded resources.
+	// Includes all .tmpl files in 'views' and 'views/partials'.
 	tpl := template.Must(template.New("").Funcs(funcs).ParseFS(
 		resources, "views/*.tmpl", "views/partials/*.tmpl"))
 
+	// Create an App instance containing the DB pool and templates.
 	app := &App{db: pool, tpl: tpl}
 
+	// Initialize HTTP request multiplexer (router).
 	mux := http.NewServeMux()
-	mux.HandleFunc("/", app.handleIndex)
-	mux.HandleFunc("/log", app.handleLog)
-	mux.HandleFunc("/food", app.handleFood)
-	mux.HandleFunc("/api/bmi", app.handleBMI)
-	mux.HandleFunc("/api/log/weight", app.handleLogWeight)
-	mux.HandleFunc("/api/log/calorie", app.handleLogCalorie)
-	mux.HandleFunc("/api/log/cardio", app.handleLogCardio)
-	mux.HandleFunc("/api/log/mood", app.handleLogMood)
-	mux.HandleFunc("/api/summary/daily", app.handleGetDailySummary)
-	mux.HandleFunc("/api/calories/today", app.handleGetCaloriesToday)
-	mux.HandleFunc("/api/summary/weekly", app.handleGetWeeklySummary) // New route
-	mux.HandleFunc("/weekly", app.handleWeekly)
+	// Register handlers for various URL paths.
+	mux.HandleFunc("/", app.handleIndex)             // Main page, shows daily summary and food log.
+	mux.HandleFunc("/log", app.handleLog)             // Handles form submissions for daily metrics.
+	mux.HandleFunc("/food", app.handleFood)           // Handles form submissions for food entries.
+	mux.HandleFunc("/api/bmi", app.handleBMI)                               // API: Returns BMI data for the last 30 days.
+	mux.HandleFunc("/api/log/weight", app.handleLogWeight)                   // API: Logs weight for a given date.
+	mux.HandleFunc("/api/log/calorie", app.handleLogCalorie)                 // API: Logs a calorie entry for a given date.
+	mux.HandleFunc("/api/log/cardio", app.handleLogCardio)                   // API: Logs cardio activity for a given date.
+	mux.HandleFunc("/api/log/mood", app.handleLogMood)                       // API: Logs mood for a given date.
+	mux.HandleFunc("/api/summary/daily", app.handleGetDailySummary)         // API: Returns daily summary for a given date.
+	mux.HandleFunc("/api/calories/today", app.handleGetCaloriesToday)       // API: Returns total calories logged for today.
+	mux.HandleFunc("/api/summary/weekly", app.handleGetWeeklySummary) // API: Returns weekly summary statistics.
+	mux.HandleFunc("/weekly", app.handleWeekly)                             // Renders the weekly summary page.
 
+	// Configure the HTTP server.
 	server := &http.Server{
-		Addr:    ":8181",
+		Addr:    ":8181", // Server listens on port 8181.
 		Handler: mux,
 	}
 
+	// Start the HTTP server in a new goroutine.
 	go func() {
 		log.Println("Listening on :8181")
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("http: %v", err)
+			log.Fatalf("http: %v", err) // Log fatal error if server fails to start (excluding ErrServerClosed).
 		}
 	}()
 
-	// Graceful shutdown on Ctrl-C
+	// Graceful shutdown setup.
+	// Listen for interrupt (Ctrl-C) or SIGTERM signals.
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
-	<-sig
+	<-sig // Block until a signal is received.
+
+	// Perform shutdown with a timeout.
 	log.Println("Shutting down …")
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	_ = server.Shutdown(ctx)
+	_ = server.Shutdown(ctx) // Attempt to gracefully shut down the server.
 }
 
 /* ───────────────────── DB helpers ───────────────────── */
 
+// fetchSummary retrieves a slice of DailySummary objects for a specified date range.
+// The range is defined by a 'pivot' date and a 'span' (number of days before and after pivot).
+// It queries the `v_daily_summary` view.
+// userID is currently hardcoded to 1.
 func (a *App) fetchSummary(ctx context.Context, pivot time.Time, span int) ([]DailySummary, error) {
+	// Calculate start and end dates for the query.
 	start := pivot.AddDate(0, 0, -span)
 	end := pivot.AddDate(0, 0, span)
 
+	// SQL query to fetch daily summaries.
+	// Note: user_id = 1 is hardcoded, assuming a single-user application.
 	rows, err := a.db.Query(ctx, `
         SELECT log_date, weight_kg, kcal_estimated, kcal_budgeted,
                mood, motivation, total_activity_min, sleep_duration
@@ -235,6 +274,7 @@ func (a *App) fetchSummary(ctx context.Context, pivot time.Time, span int) ([]Da
 			&mood, &motiv, &act, &sl); err != nil {
 			return nil, err
 		}
+		// Nullable fields from DB need to be checked for validity before assignment.
 		if weight.Valid {
 			v := weight.Float64
 			d.WeightKg = &v
@@ -266,10 +306,16 @@ func (a *App) fetchSummary(ctx context.Context, pivot time.Time, span int) ([]Da
 
 		out = append(out, d)
 	}
+	// rows.Err() checks for errors encountered during iteration.
 	return out, rows.Err()
 }
 
+// fetchFood retrieves all food entries logged for the current day.
+// It queries `daily_calorie_entries` joined with `daily_logs`.
+// userID is currently hardcoded to 1.
+// Results are ordered by creation time.
 func (a *App) fetchFood(ctx context.Context) ([]FoodEntry, error) {
+	// SQL query to fetch food entries for user_id 1 and today's date.
 	rows, err := a.db.Query(ctx, `
 		SELECT e.entry_id, e.created_at, e.calories, e.note
 		FROM daily_calorie_entries e
@@ -293,7 +339,14 @@ func (a *App) fetchFood(ctx context.Context) ([]FoodEntry, error) {
 	return out, rows.Err()
 }
 
+// fetchQuickAdd retrieves a list of up to 5 most frequently logged food items (note and calories combination).
+// This is used to populate the "Quick Add" section in the UI.
+// It queries `daily_calorie_entries` and groups by note and calories.
+// userID is currently hardcoded to 1.
+// Results are ordered by frequency (COUNT(*)) and then by most recent entry (MAX(e.created_at)).
 func (a *App) fetchQuickAdd(ctx context.Context) ([]QuickAddItem, error) {
+	// SQL query to find common food entries.
+	// COALESCE(NULLIF(e.note,''),'') treats NULL or empty notes as empty strings for grouping.
 	rows, err := a.db.Query(ctx, `
 		SELECT COALESCE(NULLIF(e.note,''),'') AS note, e.calories
 		  FROM daily_calorie_entries e
@@ -318,15 +371,20 @@ func (a *App) fetchQuickAdd(ctx context.Context) ([]QuickAddItem, error) {
 	return out, rows.Err()
 }
 
+// fetchSingleDaySummary retrieves the DailySummary for a specific date and user.
+// If no data exists for that date, it returns a DailySummary with only LogDate set,
+// and other fields as nil. This is not considered an error (sql.ErrNoRows is handled).
+// Any other database error is returned.
 func (a *App) fetchSingleDaySummary(ctx context.Context, date time.Time, userID int) (DailySummary, error) {
 	var summary DailySummary
-	summary.LogDate = date // Set the date initially
+	summary.LogDate = date // Initialize LogDate in the summary.
 
 	var (
 		weight                         sql.NullFloat64
 		est, bud, mood, motiv, act, sl sql.NullInt32
 	)
 
+	// Query the v_daily_summary view for the given user and date.
 	err := a.db.QueryRow(ctx, `
         SELECT weight_kg, kcal_estimated, kcal_budgeted,
                mood, motivation, total_activity_min, sleep_duration
@@ -339,13 +397,16 @@ func (a *App) fetchSingleDaySummary(ctx context.Context, date time.Time, userID 
 
 	if err != nil {
 		if err == sql.ErrNoRows {
-			// Return summary with only LogDate set, other fields will be nil
-			return summary, nil // Not an application error if no data for date
+			// If no rows are found, it's not an error for this function's purpose.
+			// Return the summary with only LogDate populated.
+			return summary, nil
 		}
-		return summary, err // Actual database error
+		// For any other error, return the error.
+		return summary, err
 	}
 
-	// Populate the summary struct
+	// Populate the summary struct with data from the database.
+	// Handles nullable fields by checking '.Valid'.
 	if weight.Valid {
 		v := weight.Float64
 		summary.WeightKg = &v
@@ -380,9 +441,15 @@ func (a *App) fetchSingleDaySummary(ctx context.Context, date time.Time, userID 
 
 /* ───────────────────── Handlers ───────────────────── */
 
+// handleIndex serves the main page ('/').
+// It fetches daily summary data centered around a 'pivot' date (defaulting to today),
+// today's food entries, and quick-add food items.
+// The 'd' query parameter can be used to set the pivot date (e.g., "?d=2023-01-15").
 func (a *App) handleIndex(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
+	// Determine the pivot date for the summary view.
+	// Defaults to today, can be overridden by 'd' query parameter.
 	pivot := time.Now()
 	if qs := r.URL.Query().Get("d"); qs != "" {
 		if p, err := time.Parse("2006-01-02", qs); err == nil {
@@ -390,65 +457,91 @@ func (a *App) handleIndex(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Fetch summary data (e.g., for a 7-day view, span would be 3 days before/after pivot).
 	summary, err := a.fetchSummary(ctx, pivot, 3)
-
 	if err != nil {
 		http.Error(w, err.Error(), 500)
 		return
 	}
 
-	foods, _ := a.fetchFood(ctx) // today’s food; unchanged
+	// Fetch today's food entries and quick-add items. Errors are ignored for simplicity here.
+	foods, _ := a.fetchFood(ctx)
 	quick, _ := a.fetchQuickAdd(ctx)
 
+	// Prepare data for the template.
 	data := PageData{
 		Pivot:    pivot,
 		Summary:  summary,
 		Food:     foods,
 		QuickAdd: quick,
 	}
+	// Render the main index template.
 	_ = a.tpl.ExecuteTemplate(w, "index.tmpl", data)
 }
 
+// handleLog handles POST requests to /log for updating various daily metrics like weight, mood, and sleep.
+// It uses a helper closure `update` to dynamically construct SQL UPDATE statements based on form values.
+// userID is currently hardcoded to 1.
+// If the request is not an HTMX request (HX-Request header is not present), it redirects to the home page.
+// Otherwise, it returns an HTML partial (summary_partial.tmpl) for HTMX to swap into the page.
 func (a *App) handleLog(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+	// Ensure method is POST.
 	if r.Method != http.MethodPost {
 		http.Error(w, "method", 405)
 		return
 	}
+	// Parse form data.
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "bad form", 400)
 		return
 	}
 
+	// userID is hardcoded, reflecting single-user design.
 	userID := 1
+	// Ensure a daily_log entry exists for today, creating one if necessary.
 	_, _ = a.db.Exec(ctx, `INSERT INTO daily_logs (user_id, log_date)
 	                       VALUES ($1, CURRENT_DATE)
 	                       ON CONFLICT (user_id, log_date) DO NOTHING`, userID)
 
+	// Helper closure to update a specific column in daily_logs.
+	// This avoids repetitive SQL execution code for different fields.
 	update := func(col, formKey string) {
 		val := r.FormValue(formKey)
-		if val == "" {
+		if val == "" { // Only update if a value is provided in the form.
 			return
 		}
+		// Dynamically construct the SQL query. Be cautious with dynamic SQL;
+		// here `col` is from a controlled set of strings, not direct user input.
 		_, err := a.db.Exec(ctx, fmt.Sprintf(
 			`UPDATE daily_logs SET %s = $1 WHERE user_id = $2 AND log_date = CURRENT_DATE`, col),
 			val, userID)
 		if err != nil {
-			log.Printf("update %s: %v", col, err)
+			log.Printf("update %s: %v", col, err) // Log errors during update.
 		}
 	}
+	// Update specific fields based on form values.
 	update("weight_kg", "weight_kg")
 	update("mood", "mood")
-	update("sleep_duration", "sleep_min")
+	update("sleep_duration", "sleep_min") // Form key "sleep_min" maps to "sleep_duration" column.
 
+	// HTMX specific handling:
+	// If the request does not have the "HX-Request" header, it's a standard form submission.
 	if r.Header.Get("HX-Request") == "" {
-		http.Redirect(w, r, "/", 303)
+		http.Redirect(w, r, "/", 303) // Redirect to home page.
 		return
 	}
-	sum, _ := a.fetchSummary(ctx, time.Now(), 3)
+	// If it is an HTMX request, render and return only the summary partial.
+	sum, _ := a.fetchSummary(ctx, time.Now(), 3) // Fetch fresh summary data.
 	_ = a.tpl.ExecuteTemplate(w, "summary_partial.tmpl", sum)
 }
 
+// handleFood handles POST requests to /food for logging new calorie entries.
+// It first ensures a `daily_logs` entry exists for the current day and user (hardcoded as 1),
+// then inserts the new food entry into `daily_calorie_entries`.
+// For HTMX requests, it returns two HTML fragments: the updated food list and
+// the updated summary section (marked for out-of-band swap).
+// For non-HTMX requests, it redirects to the home page.
 func (a *App) handleFood(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	if r.Method != http.MethodPost {
@@ -460,26 +553,30 @@ func (a *App) handleFood(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Validate calorie input.
 	calStr := r.FormValue("calories")
 	cal, err := strconv.Atoi(calStr)
-	if err != nil || cal < 0 {
+	if err != nil || cal < 0 { // Calories must be a non-negative integer.
 		http.Error(w, "calories", 400)
 		return
 	}
 	note := r.FormValue("note")
-	userID := 1
+	userID := 1 // Hardcoded userID.
 
+	// Get or create a log_id for today's entry.
+	// ON CONFLICT clause handles cases where the log entry might already exist.
 	var logID int
 	if err := a.db.QueryRow(ctx, `
 		INSERT INTO daily_logs (user_id, log_date)
 		VALUES ($1, CURRENT_DATE)
 		ON CONFLICT (user_id, log_date) DO UPDATE
-		SET log_date = EXCLUDED.log_date
+		SET log_date = EXCLUDED.log_date -- Effectively a 'DO NOTHING' that still returns log_id
 		RETURNING log_id`, userID).Scan(&logID); err != nil {
 		http.Error(w, err.Error(), 500)
 		return
 	}
 
+	// Insert the new food entry. NULLIF is used to store empty notes as NULL.
 	_, err = a.db.Exec(ctx, `
 		INSERT INTO daily_calorie_entries (log_id, calories, note)
 		VALUES ($1, $2, NULLIF($3,''))`, logID, cal, note)
@@ -488,38 +585,52 @@ func (a *App) handleFood(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// HTMX specific handling.
 	if r.Header.Get("HX-Request") == "" {
 		http.Redirect(w, r, "/", 303)
 		return
 	}
 
+	// For HTMX, fetch updated food list and summary.
 	foods, _ := a.fetchFood(ctx)
 	sum, _ := a.fetchSummary(ctx, time.Now(), 3)
 
+	// Render food list and summary partials into string builders.
 	var foodHTML, sumHTML strings.Builder
 	_ = a.tpl.ExecuteTemplate(&foodHTML, "food.tmpl", foods)
 	_ = a.tpl.ExecuteTemplate(&sumHTML, "summary_partial.tmpl", sum)
 
+	// Modify the summary HTML to include an out-of-band swap instruction for HTMX.
+	// This tells HTMX to replace the element with id="summary" elsewhere on the page.
 	summaryFrag := strings.Replace(sumHTML.String(),
 		`id="summary"`, `id="summary" hx-swap-oob="outerHTML"`, 1)
 
+	// Return both fragments to the client.
 	fmt.Fprint(w, foodHTML.String(), "\n", summaryFrag)
 }
 
+// handleBMI serves GET requests to /api/bmi.
+// It returns a JSON array of BMI values for the last 30 days.
+// Data is fetched from `v_bmi` view, joined with a generated series of dates
+// to ensure all dates in the 30-day period are present, even if no BMI is logged.
+// userID is hardcoded to 1.
 func (a *App) handleBMI(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+	// SQL query to get BMI for the last 30 days.
+	// generate_series creates a list of dates, LEFT JOIN ensures all dates are included.
+	// userID is hardcoded to 1.
 	const sql = `
     SELECT d.dt AS log_date, b.bmi AS value
     FROM generate_series(
-       CURRENT_DATE - INTERVAL '29 days',
+       CURRENT_DATE - INTERVAL '29 days', -- 30 days including today
        CURRENT_DATE,
        '1 day'
     ) AS d(dt)
     LEFT JOIN v_bmi AS b
-      ON b.log_date = d.dt AND b.user_id = $1
+      ON b.log_date = d.dt AND b.user_id = $1 -- Hardcoded user_id
     ORDER BY d.dt;
   `
-	rows, err := a.db.Query(ctx, sql, 1)
+	rows, err := a.db.Query(ctx, sql, 1) // user_id = 1
 	if err != nil {
 		http.Error(w, err.Error(), 500)
 		return
@@ -541,15 +652,21 @@ func (a *App) handleBMI(w http.ResponseWriter, r *http.Request) {
 		series = append(series, b)
 	}
 
+	// Log the generated series for debugging or informational purposes.
 	log.Println(series)
 
+	// Set content type and encode the series as JSON response.
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(series)
 }
 
+// handleWeekly serves the /weekly page.
+// It fetches statistics for the current week from `v_weekly_stats` view
+// (hardcoded for userID 1 and the current week) and renders the weekly.tmpl template.
 func (a *App) handleWeekly(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	var wk Weekly
+	// Fetch weekly stats for user_id 1 and the start of the current week.
 	err := a.db.QueryRow(ctx, `
 		SELECT week_start, avg_weight, total_budgeted, total_estimated, total_deficit
 		  FROM v_weekly_stats
@@ -557,21 +674,32 @@ func (a *App) handleWeekly(w http.ResponseWriter, r *http.Request) {
 		   AND week_start = date_trunc('week', CURRENT_DATE)`).
 		Scan(&wk.WeekStart, &wk.AvgWeight, &wk.TotalBudgeted, &wk.TotalEstimated, &wk.TotalDeficit)
 	if err != nil {
+		// Handle sql.ErrNoRows gracefully, or other errors.
+		// For simplicity, currently sending 500 for any error here.
+		// Consider rendering the page with a "no data" message for ErrNoRows.
 		http.Error(w, err.Error(), 500)
 		return
 	}
+	// Render the weekly template with fetched data.
 	_ = a.tpl.ExecuteTemplate(w, "weekly.tmpl", wk)
 }
 
-// handleLogWeight handles POST /api/log/weight
+// handleLogWeight handles POST requests to /api/log/weight.
+// It expects a JSON payload with "weight_kg" and an optional "date" (YYYY-MM-DD).
+// If date is not provided, it defaults to the current day.
+// It ensures a `daily_logs` entry exists for the user (hardcoded as 1) and date,
+// then updates the `weight_kg` for that log entry.
+// Returns a JSON response indicating success or failure.
 func (a *App) handleLogWeight(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
+	// Ensure method is POST.
 	if r.Method != http.MethodPost {
 		http.Error(w, "Only POST method is allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
+	// Decode JSON payload.
 	var reqPayload WeightLogRequest
 	if err := json.NewDecoder(r.Body).Decode(&reqPayload); err != nil {
 		log.Printf("Error decoding weight log payload: %v", err)
@@ -581,6 +709,7 @@ func (a *App) handleLogWeight(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Validate weight value.
 	if reqPayload.WeightKg <= 0 {
 		log.Printf("Invalid weight_kg value: %f", reqPayload.WeightKg)
 		w.Header().Set("Content-Type", "application/json")
@@ -589,6 +718,7 @@ func (a *App) handleLogWeight(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Determine log date, defaulting to today.
 	logDate := time.Now().Format("2006-01-02")
 	if reqPayload.Date != "" {
 		parsedDate, err := time.Parse("2006-01-02", reqPayload.Date)
@@ -602,14 +732,14 @@ func (a *App) handleLogWeight(w http.ResponseWriter, r *http.Request) {
 		logDate = parsedDate.Format("2006-01-02")
 	}
 
-	userID := 1 // Hardcoded user_id as per existing patterns
+	userID := 1 // Hardcoded user_id.
 
-	// Get or create log_id
+	// Ensure daily_log entry exists and get its ID.
 	var logID int
 	err := a.db.QueryRow(ctx, `
 		INSERT INTO daily_logs (user_id, log_date)
 		VALUES ($1, $2)
-		ON CONFLICT (user_id, log_date) DO UPDATE SET log_date = EXCLUDED.log_date
+		ON CONFLICT (user_id, log_date) DO UPDATE SET log_date = EXCLUDED.log_date -- Ensures log_id is returned
 		RETURNING log_id`, userID, logDate).Scan(&logID)
 
 	if err != nil {
@@ -620,9 +750,8 @@ func (a *App) handleLogWeight(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Update weight_kg in daily_logs table (as per handleLog example)
-	// The schema seems to have weight_kg directly in daily_logs, not a separate logs_metrics table.
-	// The handleLog function updates daily_logs directly.
+	// Update weight_kg in the daily_logs table.
+	// This matches the pattern in `handleLog` where `daily_logs` is updated directly.
 	_, err = a.db.Exec(ctx,
 		`UPDATE daily_logs SET weight_kg = $1 WHERE log_id = $2 AND user_id = $3`,
 		reqPayload.WeightKg, logID, userID)
@@ -635,12 +764,18 @@ func (a *App) handleLogWeight(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Return success response.
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(WeightLogResponse{Success: true, Message: "Weight logged successfully"})
 }
 
-// handleLogCalorie handles POST /api/log/calorie
+// handleLogCalorie handles POST requests to /api/log/calorie.
+// Expects JSON payload with "calories", optional "note", and optional "date".
+// Defaults to current day if date is not provided.
+// Ensures `daily_logs` entry exists for user (hardcoded 1) and date, then inserts
+// a new entry into `daily_calorie_entries`.
+// Returns JSON response indicating success or failure.
 func (a *App) handleLogCalorie(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -658,7 +793,7 @@ func (a *App) handleLogCalorie(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if reqPayload.Calories < 0 {
+	if reqPayload.Calories < 0 { // Calories should not be negative.
 		log.Printf("Invalid calories value: %d", reqPayload.Calories)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
@@ -679,9 +814,8 @@ func (a *App) handleLogCalorie(w http.ResponseWriter, r *http.Request) {
 		logDate = parsedDate.Format("2006-01-02")
 	}
 
-	userID := 1 // Hardcoded user_id
+	userID := 1 // Hardcoded user_id.
 
-	// Get or create log_id
 	var logID int
 	err := a.db.QueryRow(ctx, `
 		INSERT INTO daily_logs (user_id, log_date)
@@ -697,7 +831,8 @@ func (a *App) handleLogCalorie(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Insert calorie entry
+	// Insert the calorie entry into daily_calorie_entries.
+	// NULLIF($3,'') ensures empty note strings are stored as NULL in the database.
 	_, err = a.db.Exec(ctx, `
 		INSERT INTO daily_calorie_entries (log_id, calories, note)
 		VALUES ($1, $2, NULLIF($3,''))`, logID, reqPayload.Calories, reqPayload.Note)
@@ -714,7 +849,11 @@ func (a *App) handleLogCalorie(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(CalorieLogResponse{Success: true, Message: "Calorie entry logged successfully"})
 }
 
-// handleLogCardio handles POST /api/log/cardio
+// handleLogCardio handles POST requests to /api/log/cardio.
+// Expects JSON with "duration_min" and optional "date". Defaults to current day.
+// Ensures `daily_logs` entry exists, then updates `total_activity_min` by adding the new duration.
+// COALESCE is used to handle NULL `total_activity_min` values in the database.
+// Returns JSON response indicating success or failure.
 func (a *App) handleLogCardio(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -732,7 +871,7 @@ func (a *App) handleLogCardio(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if reqPayload.DurationMin < 0 {
+	if reqPayload.DurationMin < 0 { // Duration should not be negative.
 		log.Printf("Invalid duration_min value: %d", reqPayload.DurationMin)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
@@ -753,9 +892,8 @@ func (a *App) handleLogCardio(w http.ResponseWriter, r *http.Request) {
 		logDate = parsedDate.Format("2006-01-02")
 	}
 
-	userID := 1 // Hardcoded user_id
+	userID := 1 // Hardcoded user_id.
 
-	// Get or create log_id
 	var logID int
 	err := a.db.QueryRow(ctx, `
 		INSERT INTO daily_logs (user_id, log_date)
@@ -771,8 +909,8 @@ func (a *App) handleLogCardio(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Update total_activity_min in daily_logs
-	// COALESCE is used to treat NULL as 0 when adding duration
+	// Update total_activity_min in daily_logs.
+	// COALESCE(total_activity_min, 0) ensures that if total_activity_min is NULL, it's treated as 0 before adding.
 	_, err = a.db.Exec(ctx, `
 		UPDATE daily_logs
 		SET total_activity_min = COALESCE(total_activity_min, 0) + $1
@@ -792,7 +930,10 @@ func (a *App) handleLogCardio(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(CardioLogResponse{Success: true, Message: "Cardio activity logged successfully"})
 }
 
-// handleLogMood handles POST /api/log/mood
+// handleLogMood handles POST requests to /api/log/mood.
+// Expects JSON with "mood" (integer) and optional "date". Defaults to current day.
+// Ensures `daily_logs` entry exists, then updates the `mood` for that log.
+// Returns JSON response indicating success or failure.
 func (a *App) handleLogMood(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -802,9 +943,6 @@ func (a *App) handleLogMood(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var reqPayload MoodLogRequest
-	// The request body should contain the mood value as an integer.
-	// A field like "value" or "mood_level" might be expected by the client.
-	// For now, sticking to "mood" as per struct.
 	if err := json.NewDecoder(r.Body).Decode(&reqPayload); err != nil {
 		log.Printf("Error decoding mood log payload: %v", err)
 		w.Header().Set("Content-Type", "application/json")
@@ -813,14 +951,8 @@ func (a *App) handleLogMood(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Optional: Add validation for mood value if specific range is known (e.g., 1-5)
-	// if reqPayload.Mood < 1 || reqPayload.Mood > 5 {
-	// 	log.Printf("Invalid mood value: %d", reqPayload.Mood)
-	// 	w.Header().Set("Content-Type", "application/json")
-	// 	w.WriteHeader(http.StatusBadRequest)
-	// 	json.NewEncoder(w).Encode(MoodLogResponse{Success: false, Message: "Mood value out of range."})
-	// 	return
-	// }
+	// Optional: Add validation for mood value if a specific range is expected (e.g., 1-5).
+	// e.g., if reqPayload.Mood < 1 || reqPayload.Mood > 5 { ... return error ... }
 
 	logDate := time.Now().Format("2006-01-02")
 	if reqPayload.Date != "" {
@@ -835,7 +967,7 @@ func (a *App) handleLogMood(w http.ResponseWriter, r *http.Request) {
 		logDate = parsedDate.Format("2006-01-02")
 	}
 
-	userID := 1 // Hardcoded user_id
+	userID := 1 // Hardcoded user_id.
 
 	var logID int
 	err := a.db.QueryRow(ctx, `
@@ -852,6 +984,7 @@ func (a *App) handleLogMood(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Update mood in daily_logs.
 	_, err = a.db.Exec(ctx,
 		`UPDATE daily_logs SET mood = $1 WHERE log_id = $2 AND user_id = $3`,
 		reqPayload.Mood, logID, userID)
@@ -869,7 +1002,13 @@ func (a *App) handleLogMood(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(MoodLogResponse{Success: true, Message: "Mood logged successfully"})
 }
 
-// handleGetDailySummary handles GET /api/summary/daily?date=YYYY-MM-DD
+// handleGetDailySummary handles GET requests to /api/summary/daily.
+// It expects an optional "date" query parameter (YYYY-MM-DD).
+// If "date" is not provided or invalid, it defaults to the current day.
+// Fetches daily summary metrics for the specified date and user (hardcoded as 1)
+// using `fetchSingleDaySummary`.
+// Returns a JSON object of type DailySummary. If no data exists for the date,
+// metrics fields in the JSON will be null.
 func (a *App) handleGetDailySummary(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -878,46 +1017,49 @@ func (a *App) handleGetDailySummary(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Determine the query date from the "date" query parameter.
 	dateStr := r.URL.Query().Get("date")
 	var queryDate time.Time
 	var err error
 
 	if dateStr == "" {
-		queryDate = time.Now()
+		queryDate = time.Now() // Default to today if no date parameter.
 	} else {
 		queryDate, err = time.Parse("2006-01-02", dateStr)
 		if err != nil {
+			// If parsing fails, log error and default to today.
 			log.Printf("Invalid date format query parameter: %s, error: %v", dateStr, err)
-			// Default to today if parsing fails (as per requirement: "Default to today if not provided or invalid")
 			queryDate = time.Now()
 		}
 	}
-	// Normalize queryDate to just YYYY-MM-DD for consistency in fetching and response
+	// Normalize queryDate to ensure only YYYY-MM-DD is considered (time part is zeroed).
 	queryDate = time.Date(queryDate.Year(), queryDate.Month(), queryDate.Day(), 0, 0, 0, 0, queryDate.Location())
 
+	userID := 1 // Hardcoded user_id.
 
-	userID := 1 // Hardcoded user_id
-
+	// Fetch the summary for the single day.
 	summary, err := a.fetchSingleDaySummary(ctx, queryDate, userID)
 	if err != nil {
-		// This implies an actual DB error, not sql.ErrNoRows (handled in fetchSingleDaySummary)
+		// `fetchSingleDaySummary` handles sql.ErrNoRows internally.
+		// An error here indicates a more significant database issue.
 		log.Printf("Error fetching single day summary for user %d, date %s: %v", userID, queryDate.Format("2006-01-02"), err)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
-		// Using MoodLogResponse for generic error, consider a more generic error struct if many such endpoints
 		json.NewEncoder(w).Encode(MoodLogResponse{Success: false, Message: "Error fetching daily summary."})
 		return
 	}
 
-	// The summary.LogDate is already set by fetchSingleDaySummary correctly to the queryDate.
-	// If no record was found, the metric fields in summary will be nil.
-
+	// LogDate in summary is already correctly set by fetchSingleDaySummary.
+	// If no record was found for the date, metric fields will be nil.
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(summary)
 }
 
-// handleGetCaloriesToday handles GET /api/calories/today
+// handleGetCaloriesToday handles GET requests to /api/calories/today.
+// It calculates the total calories logged for the current day for user 1 (hardcoded).
+// Returns a JSON response with the current date and total calories.
+// COALESCE is used in SQL to ensure 0 is returned if no calorie entries exist.
 func (a *App) handleGetCaloriesToday(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -927,9 +1069,11 @@ func (a *App) handleGetCaloriesToday(w http.ResponseWriter, r *http.Request) {
 	}
 
 	currentDate := time.Now()
-	userID := 1 // Hardcoded user_id
+	userID := 1 // Hardcoded user_id.
 
 	var totalCalories int
+	// Query to sum calories for the user on the current date.
+	// COALESCE(SUM(e.calories), 0) ensures 0 if no entries, not NULL.
 	err := a.db.QueryRow(ctx, `
 		SELECT COALESCE(SUM(e.calories), 0)
 		  FROM daily_calorie_entries e
@@ -938,11 +1082,9 @@ func (a *App) handleGetCaloriesToday(w http.ResponseWriter, r *http.Request) {
 		userID, currentDate.Format("2006-01-02")).Scan(&totalCalories)
 
 	if err != nil {
-		// Log the error and return a generic server error response
 		log.Printf("Error fetching total calories for user %d, date %s: %v", userID, currentDate.Format("2006-01-02"), err)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
-		// Using MoodLogResponse for a generic error structure; consider a dedicated one if this pattern repeats.
 		json.NewEncoder(w).Encode(MoodLogResponse{Success: false, Message: "Error fetching total calories."})
 		return
 	}
@@ -957,7 +1099,13 @@ func (a *App) handleGetCaloriesToday(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
-// handleGetWeeklySummary handles GET /api/summary/weekly?start_date=YYYY-MM-DD
+// handleGetWeeklySummary handles GET requests to /api/summary/weekly.
+// Expects an optional "start_date" query parameter (YYYY-MM-DD).
+// If "start_date" is not provided or invalid, it defaults to the start of the current week.
+// The provided "start_date" is normalized to the beginning of its week (e.g., Monday).
+// Fetches weekly summary statistics from `v_weekly_stats` for the determined week start date
+// and user (hardcoded as 1).
+// Returns a JSON object of type Weekly. If no data for the week, metric fields are nil/zero.
 func (a *App) handleGetWeeklySummary(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -969,10 +1117,11 @@ func (a *App) handleGetWeeklySummary(w http.ResponseWriter, r *http.Request) {
 	dateStr := r.URL.Query().Get("start_date")
 	var weekStartDate time.Time
 	var err error
-	userID := 1 // Hardcoded user_id
+	userID := 1 // Hardcoded user_id.
 
+	// Determine the week start date.
 	if dateStr == "" {
-		// Default to the start of the current week by querying the DB
+		// Default to the start of the current week (e.g., Monday).
 		err = a.db.QueryRow(ctx, `SELECT date_trunc('week', CURRENT_DATE);`).Scan(&weekStartDate)
 		if err != nil {
 			log.Printf("Error fetching default week start date: %v", err)
@@ -980,38 +1129,38 @@ func (a *App) handleGetWeeklySummary(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	} else {
-		weekStartDate, err = time.Parse("2006-01-02", dateStr)
+		parsedDate, err := time.Parse("2006-01-02", dateStr)
 		if err != nil {
 			log.Printf("Invalid start_date format query parameter: %s, error: %v", dateStr, err)
-			// Default to start of current week if parsing fails
+			// Default to current week's start if parsing fails.
 			err = a.db.QueryRow(ctx, `SELECT date_trunc('week', CURRENT_DATE);`).Scan(&weekStartDate)
-			if err != nil {
+			if err != nil { // Handle error for this fallback query too.
 				log.Printf("Error fetching default week start date after parse failure: %v", err)
 				http.Error(w, "Error determining current week start date.", http.StatusInternalServerError)
 				return
 			}
+		} else {
+			// Normalize the parsed date to the start of its week to ensure consistency.
+			var actualWeekStartForProvidedDate time.Time
+			err = a.db.QueryRow(ctx, `SELECT date_trunc('week', $1::date);`, parsedDate).Scan(&actualWeekStartForProvidedDate)
+			if err != nil {
+				log.Printf("Error truncating provided start_date %s: %v", parsedDate.Format("2006-01-02"), err)
+				http.Error(w, "Error processing provided start_date.", http.StatusInternalServerError)
+				return
+			}
+			weekStartDate = actualWeekStartForProvidedDate
 		}
-		// Ensure the provided date is actually a week start date (e.g. a Monday)
-		// This can be done by truncating it to the week.
-		var actualWeekStartForProvidedDate time.Time
-		err = a.db.QueryRow(ctx, `SELECT date_trunc('week', $1::date);`, weekStartDate).Scan(&actualWeekStartForProvidedDate)
-		if err != nil {
-			log.Printf("Error truncating provided start_date %s: %v", weekStartDate.Format("2006-01-02"), err)
-			http.Error(w, "Error processing provided start_date.", http.StatusInternalServerError)
-			return
-		}
-		weekStartDate = actualWeekStartForProvidedDate
 	}
 
 	var weeklySummary Weekly
-	// Set WeekStart in the response, even if no other data is found
-	weeklySummary.WeekStart = time.Date(weekStartDate.Year(), weekStartDate.Month(), weekStartDate.Day(), 0,0,0,0, time.UTC)
+	// Ensure WeekStart in response is UTC and only date part, for consistency.
+	weeklySummary.WeekStart = time.Date(weekStartDate.Year(), weekStartDate.Month(), weekStartDate.Day(), 0, 0, 0, 0, time.UTC)
 
-
+	// Fetch weekly statistics from the v_weekly_stats view.
 	err = a.db.QueryRow(ctx, `
 		SELECT avg_weight, total_budgeted, total_estimated, total_deficit
 		  FROM v_weekly_stats
-		 WHERE user_id = $1 AND week_start = $2`,
+		 WHERE user_id = $1 AND week_start = $2`, // user_id = 1, and determined week_start
 		userID, weeklySummary.WeekStart).Scan(
 		&weeklySummary.AvgWeight,
 		&weeklySummary.TotalBudgeted,
@@ -1021,20 +1170,22 @@ func (a *App) handleGetWeeklySummary(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		if err == sql.ErrNoRows {
-			// No data for this week, return the weeklySummary struct with WeekStart and nil/zero values for metrics
+			// If no data for the week, return the summary with WeekStart set and metrics as nil/zero.
+			// This is considered a valid response, not an error.
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
 			json.NewEncoder(w).Encode(weeklySummary)
 			return
 		}
-		// Actual database error
+		// For other database errors, log and return an internal server error.
 		log.Printf("Error fetching weekly summary for user %d, week_start %s: %v", userID, weeklySummary.WeekStart.Format("2006-01-02"), err)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(MoodLogResponse{Success: false, Message: "Error fetching weekly summary."}) // Using generic error response
+		json.NewEncoder(w).Encode(MoodLogResponse{Success: false, Message: "Error fetching weekly summary."})
 		return
 	}
 
+	// Successfully fetched data.
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(weeklySummary)
