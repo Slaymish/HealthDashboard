@@ -40,8 +40,8 @@ def main():
         print(f"❌ Error reading CSV file: {e}")
         return
 
-    # Corrected regex: use \\ instead of \ for embedded strings
-    day_re = re.compile(r"Day\\s+(\\d+)", re.I)
+    # Corrected regex: use \s+ for whitespace and \d+ for digits
+    day_re = re.compile(r"Day\s+(\d+)", re.I)
 
     if "Day" not in df.columns:
         print("❌ Error: 'Day' column not found in the input CSV.")
