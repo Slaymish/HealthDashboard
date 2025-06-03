@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en" class="scroll-smooth h-full">
+<html lang="en" class="dark scroll-smooth h-full">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -12,46 +12,11 @@
 
   <title>HealthDash</title>
 
-  <!-- theme toggle script -->
-  <script>
-    (function() {
-      const html = document.documentElement;
-      const stored = localStorage.getItem('theme');
-      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-      // Determine initial state
-      const isDark = stored
-        ? (stored === 'dark')
-        : prefersDark;
-      // Apply it
-      if (isDark) html.classList.add('dark');
-      else        html.classList.remove('dark');
-      console.log('[Theme] initial:', isDark ? 'dark' : 'light');
-
-      // Expose toggle
-      window.toggleTheme = () => {
-        html.classList.toggle('dark');
-        const nowDark = html.classList.contains('dark');
-        localStorage.setItem('theme', nowDark ? 'dark' : 'light');
-        console.log('[Theme] toggled:', nowDark ? 'dark' : 'light');
-      };
-    })();
-  </script>
-
 
   <style>
     :root      { --accent: #14b8a6; }         /* teal-500 for light mode */
     .dark      { --accent: #22d3ee; }         /* cyan-400 for dark mode */
     ::selection{ background: var(--accent); color: #fff; }
-
-   /* Default state (light mode): light-icon shown, dark-icon hidden */
-   .light-icon { display: inline !important; }
-   .dark-icon { display: none !important; }
-
-   /* When dark mode is active on html */
-   /* When dark mode is active on html */
-   html.dark .dark-icon { display: inline !important; }
-   html.dark .light-icon { display: none !important; }
-
   </style>
 </head>
 
@@ -63,12 +28,6 @@
       <h1 class="text-xl sm:text-2xl font-bold flex items-center gap-2">
         <span class="text-[1.4rem] sm:text-[1.6rem]">🩺</span> Health&nbsp;Dashboard
       </h1>
-      <button onclick="toggleTheme()"
-              class="px-3 py-1.5 sm:py-2 rounded-lg text-sm border border-zinc-300 dark:border-zinc-700
-                     hover:bg-zinc-200 dark:hover:bg-zinc-800 transition">
-        <span class="light-icon">☀️ Light</span>
-        <span class="dark-icon">🌙 Dark</span>
-      </button>
     </div>
   </header>
 
