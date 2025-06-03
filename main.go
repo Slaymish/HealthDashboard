@@ -60,7 +60,7 @@ type QuickAddItem struct {
 // Used for the 30-day BMI trend chart.
 type BMI struct {
 	LogDate time.Time `json:"date"`
-	Value   float64   `json:"bmi"`
+	Value   *float64  `json:"bmi"` // Changed to pointer
 }
 
 // Weekly holds summarized weekly statistics.
@@ -460,13 +460,25 @@ func (a *App) handleIndex(w http.ResponseWriter, r *http.Request) {
 	// Fetch summary data (e.g., for a 7-day view, span would be 3 days before/after pivot).
 	summary, err := a.fetchSummary(ctx, pivot, 3)
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		log.Printf("Error fetching summary: %v", err)
+		http.Error(w, "Error fetching summary data", http.StatusInternalServerError)
 		return
 	}
-
-	// Fetch today's food entries and quick-add items. Errors are ignored for simplicity here.
-	foods, _ := a.fetchFood(ctx)
-	quick, _ := a.fetchQuickAdd(ctx)
+	foods, err := a.fetchFood(ctx)
+	if err != nil {
+		log.Printf("Error fetching food data: %v", err)
+		// Decide if you want to show a page with partial data or an error
+		// For now, let's return a general error.
+		http.Error(w, "Error fetching food data", http.StatusInternalServerError)
+		return
+	}
+	quick, err := a.fetchQuickAdd(ctx)
+	if err != nil {
+		log.Printf("Error fetching quick add data: %v", err)
+		// Decide if you want to show a page with partial data or an error
+		http.Error(w, "Error fetching quick add data", http.StatusInternalServerError)
+		return
+	}
 
 	// Prepare data for the template.
 	data := PageData{
@@ -476,7 +488,10 @@ func (a *App) handleIndex(w http.ResponseWriter, r *http.Request) {
 		QuickAdd: quick,
 	}
 	// Render the main index template.
-	_ = a.tpl.ExecuteTemplate(w, "index.tmpl", data)
+	if err := a.tpl.ExecuteTemplate(w, "index.tmpl", data); err != nil {
+		log.Printf("Error executing index.tmpl: %v", err)
+		http.Error(w, "Error rendering page", http.StatusInternalServerError)
+	}
 }
 
 // handleLog handles POST requests to /log for updating various daily metrics like weight, mood, and sleep.
@@ -517,7 +532,18 @@ func (a *App) handleLog(w http.ResponseWriter, r *http.Request) {
 			`UPDATE daily_logs SET %s = $1 WHERE user_id = $2 AND log_date = CURRENT_DATE`, col),
 			val, userID)
 		if err != nil {
-			log.Printf("update %s: %v", col, err) // Log errors during update.
+			log.Printf("update %s: %v", col, err) // Keep logging
+			// If it's an HTMX request, we might want to send back an error that HTMX can process.
+			// For now, if an update fails, the subsequent fetchSummary will show the old data.
+			// A more robust solution would be to return an error snippet or a specific HTTP status
+			// that the frontend HTMX code can interpret as a partial failure.
+			// However, the current structure re-fetches and re-renders the summary partial.
+			// A simple approach for now is to log and let it re-render.
+			// If a specific error response is needed for HTMX, that would be a more involved change.
+			// For now, we'll focus on not silently failing.
+			// Consider if any error here should halt further updates or return an immediate error response.
+			// For simplicity in this step, we will log it. A comprehensive solution might involve
+			// collecting errors and returning a summary of issues.
 		}
 	}
 	// Update specific fields based on form values.
@@ -533,7 +559,12 @@ func (a *App) handleLog(w http.ResponseWriter, r *http.Request) {
 	}
 	// If it is an HTMX request, render and return only the summary partial.
 	sum, _ := a.fetchSummary(ctx, time.Now(), 3) // Fetch fresh summary data.
-	_ = a.tpl.ExecuteTemplate(w, "summary_partial.tmpl", sum)
+	if err := a.tpl.ExecuteTemplate(w, "summary_partial.tmpl", sum); err != nil {
+		log.Printf("Error executing summary_partial.tmpl: %v", err)
+		// For HTMX, we might still want to return an error that HTMX can handle,
+		// or at least log it. Depending on HTMX setup, a 500 might be fine.
+		http.Error(w, "Error rendering summary partial", http.StatusInternalServerError)
+	}
 }
 
 // handleFood handles POST requests to /food for logging new calorie entries.
@@ -597,8 +628,16 @@ func (a *App) handleFood(w http.ResponseWriter, r *http.Request) {
 
 	// Render food list and summary partials into string builders.
 	var foodHTML, sumHTML strings.Builder
-	_ = a.tpl.ExecuteTemplate(&foodHTML, "food.tmpl", foods)
-	_ = a.tpl.ExecuteTemplate(&sumHTML, "summary_partial.tmpl", sum)
+	if err := a.tpl.ExecuteTemplate(&foodHTML, "food.tmpl", foods); err != nil {
+		log.Printf("Error executing food.tmpl: %v", err)
+		http.Error(w, "Error rendering food entries", http.StatusInternalServerError)
+		return
+	}
+	if err := a.tpl.ExecuteTemplate(&sumHTML, "summary_partial.tmpl", sum); err != nil {
+		log.Printf("Error executing summary_partial.tmpl for food handler: %v", err)
+		http.Error(w, "Error rendering summary partial", http.StatusInternalServerError)
+		return
+	}
 
 	// Modify the summary HTML to include an out-of-band swap instruction for HTMX.
 	// This tells HTMX to replace the element with id="summary" elsewhere on the page.
@@ -637,11 +676,6 @@ func (a *App) handleBMI(w http.ResponseWriter, r *http.Request) {
 	}
 	defer rows.Close()
 
-	type BMI struct {
-		LogDate time.Time `json:"date"`
-		Value   *float64  `json:"bmi"`
-	}
-
 	series := make([]BMI, 0, 30)
 	for rows.Next() {
 		var b BMI
@@ -651,9 +685,6 @@ func (a *App) handleBMI(w http.ResponseWriter, r *http.Request) {
 		}
 		series = append(series, b)
 	}
-
-	// Log the generated series for debugging or informational purposes.
-	log.Println(series)
 
 	// Set content type and encode the series as JSON response.
 	w.Header().Set("Content-Type", "application/json")
@@ -674,14 +705,33 @@ func (a *App) handleWeekly(w http.ResponseWriter, r *http.Request) {
 		   AND week_start = date_trunc('week', CURRENT_DATE)`).
 		Scan(&wk.WeekStart, &wk.AvgWeight, &wk.TotalBudgeted, &wk.TotalEstimated, &wk.TotalDeficit)
 	if err != nil {
-		// Handle sql.ErrNoRows gracefully, or other errors.
-		// For simplicity, currently sending 500 for any error here.
-		// Consider rendering the page with a "no data" message for ErrNoRows.
-		http.Error(w, err.Error(), 500)
-		return
+		if err == sql.ErrNoRows {
+			// wk is already zeroed struct. Set a specific WeekStart if needed,
+			// or the template should handle nil/zero values gracefully.
+			// We can pass wk as is, and let the template show "no data".
+			// Ensure WeekStart is set for the template if it relies on it.
+			// If date_trunc query for default week start failed earlier, this part won't be reached.
+			// Assuming wk needs a valid WeekStart for the template:
+			var currentWeekStart time.Time
+			errDateTrunc := a.db.QueryRow(ctx, `SELECT date_trunc('week', CURRENT_DATE);`).Scan(&currentWeekStart)
+			if errDateTrunc != nil {
+				log.Printf("Error fetching current week start for empty weekly view: %v", errDateTrunc)
+				http.Error(w, "Error preparing weekly data", http.StatusInternalServerError)
+				return
+			}
+			wk.WeekStart = currentWeekStart // Set for the template. Other fields will be nil/zero.
+			// Log that no data was found, but proceed to render the template.
+			log.Printf("No weekly stats found for user_id=1, week_start=%s. Rendering page with no data.", wk.WeekStart.Format("2006-01-02"))
+		} else {
+			log.Printf("Error fetching weekly stats: %v", err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 	}
-	// Render the weekly template with fetched data.
-	_ = a.tpl.ExecuteTemplate(w, "weekly.tmpl", wk)
+	if err := a.tpl.ExecuteTemplate(w, "weekly.tmpl", wk); err != nil { // Moved from original spot
+		log.Printf("Error executing weekly.tmpl: %v", err)
+		http.Error(w, "Error rendering weekly page", http.StatusInternalServerError)
+	}
 }
 
 // handleLogWeight handles POST requests to /api/log/weight.
@@ -1027,9 +1077,9 @@ func (a *App) handleGetDailySummary(w http.ResponseWriter, r *http.Request) {
 	} else {
 		queryDate, err = time.Parse("2006-01-02", dateStr)
 		if err != nil {
-			// If parsing fails, log error and default to today.
 			log.Printf("Invalid date format query parameter: %s, error: %v", dateStr, err)
-			queryDate = time.Now()
+			http.Error(w, "Invalid date format. Please use YYYY-MM-DD.", http.StatusBadRequest)
+			return
 		}
 	}
 	// Normalize queryDate to ensure only YYYY-MM-DD is considered (time part is zeroed).
@@ -1132,24 +1182,19 @@ func (a *App) handleGetWeeklySummary(w http.ResponseWriter, r *http.Request) {
 		parsedDate, err := time.Parse("2006-01-02", dateStr)
 		if err != nil {
 			log.Printf("Invalid start_date format query parameter: %s, error: %v", dateStr, err)
-			// Default to current week's start if parsing fails.
-			err = a.db.QueryRow(ctx, `SELECT date_trunc('week', CURRENT_DATE);`).Scan(&weekStartDate)
-			if err != nil { // Handle error for this fallback query too.
-				log.Printf("Error fetching default week start date after parse failure: %v", err)
-				http.Error(w, "Error determining current week start date.", http.StatusInternalServerError)
-				return
-			}
-		} else {
-			// Normalize the parsed date to the start of its week to ensure consistency.
-			var actualWeekStartForProvidedDate time.Time
-			err = a.db.QueryRow(ctx, `SELECT date_trunc('week', $1::date);`, parsedDate).Scan(&actualWeekStartForProvidedDate)
-			if err != nil {
-				log.Printf("Error truncating provided start_date %s: %v", parsedDate.Format("2006-01-02"), err)
-				http.Error(w, "Error processing provided start_date.", http.StatusInternalServerError)
-				return
-			}
-			weekStartDate = actualWeekStartForProvidedDate
+			http.Error(w, "Invalid start_date format. Please use YYYY-MM-DD.", http.StatusBadRequest)
+			return
 		}
+		// Normalize the parsed date to the start of its week.
+		var actualWeekStartForProvidedDate time.Time
+		// Pass parsedDate directly to query
+		err = a.db.QueryRow(ctx, `SELECT date_trunc('week', $1::date);`, parsedDate.Format("2006-01-02")).Scan(&actualWeekStartForProvidedDate)
+		if err != nil {
+			log.Printf("Error truncating provided start_date %s: %v", parsedDate.Format("2006-01-02"), err)
+			http.Error(w, "Error processing provided start_date.", http.StatusInternalServerError)
+			return
+		}
+		weekStartDate = actualWeekStartForProvidedDate
 	}
 
 	var weeklySummary Weekly
