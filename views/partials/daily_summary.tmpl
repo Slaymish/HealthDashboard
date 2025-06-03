@@ -4,6 +4,7 @@
       <th class="py-3 px-4">Date</th>
       <th class="px-4">Weight</th>
       <th class="px-4">kcal est / bud</th>
+      <th class="px-4">Net Kcal</th>
       <th class="px-4">Mood</th>
       <th class="px-4">Motivation</th>
       <th class="px-4">Activity</th>
@@ -21,6 +22,13 @@
       <td class="px-4 tabular-nums">
         {{ if $row.KcalEstimated }}{{ fmtInt $row.KcalEstimated }}{{ end }}
         {{ if $row.KcalBudgeted }} / {{ fmtInt $row.KcalBudgeted }}{{ end }}
+      </td>
+      <td class="px-4 tabular-nums">
+        {{ if and $row.KcalEstimated $row.KcalBudgeted }}
+          {{ printf "%+d" (sub (or $row.KcalEstimated 0) (or $row.KcalBudgeted 0)) }}
+        {{ else }}
+          –
+        {{ end }}
       </td>
       <td class="px-4 tabular-nums">{{ fmtInt $row.Mood }}</td>
       <td class="px-4 tabular-nums">{{ fmtInt $row.Motivation }}</td>

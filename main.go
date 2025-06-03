@@ -173,9 +173,25 @@ func fmtInt(p *int) string {
 	}
 	return fmt.Sprintf("%d", *p)
 }
+
+// fmtIntWithSign formats an int pointer to a string with a leading sign if positive, or "–" if nil.
+func fmtIntWithSign(p *int) string {
+	if p == nil {
+		return "–"
+	}
+	return fmt.Sprintf("%+d", *p)
+}
+
 func safeHTML(s string) template.HTML { return template.HTML(s) }
 func mod(a, b int) int                { return a % b }
 func todayStr() string                { return time.Now().Format("2006-01-02") }
+func sub(a, b int) int                { return a - b }
+func or(a *int, def int) int {
+	if a == nil {
+		return def
+	}
+	return *a
+}
 
 /* ───────────────────── Core app ───────────────────── */
 
@@ -203,6 +219,9 @@ func main() {
 		"mod":        mod,      // Modulo operator for template logic.
 		"todayStr":   todayStr, // Returns current date as "YYYY-MM-DD".
 		"formatNote": FormatNote, // Formats food log notes.
+		"sub":        sub,      // Subtracts two integers.
+		"or":         or,       // Returns the first value if not nil, otherwise the second.
+		"fmtIntWithSign": fmtIntWithSign, // Formats an int pointer with sign.
 	}
 	// Parse HTML templates from embedded resources.
 	// Includes all .tmpl files in 'views' and 'views/partials'.
