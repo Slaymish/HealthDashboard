@@ -146,26 +146,26 @@ type CaloriesTodayResponse struct {
 // FormatNote formats a food log note for display.
 // It handles sql.NullString and a specific string pattern.
 func FormatNote(note sql.NullString) string {
-        if !note.Valid || note.String == "" {
-                return "–"
-        }
+	if !note.Valid || note.String == "" {
+		return "–"
+	}
 
-        s := note.String
+	s := note.String
 
-        // Legacy exports sometimes look like `{Note text true}` or `{Note text false}`.
-        // Remove the braces and trailing boolean so only the note text remains.
-        if strings.HasPrefix(s, "{") && strings.HasSuffix(s, "}") {
-                inner := strings.TrimSuffix(strings.TrimPrefix(s, "{"), "}")
-                inner = strings.TrimSuffix(inner, " true")
-                inner = strings.TrimSuffix(inner, " false")
-                inner = strings.TrimSpace(inner)
-                if inner == "" {
-                        return "–"
-                }
-                return inner
-        }
+	// Legacy exports sometimes look like `{Note text true}` or `{Note text false}`.
+	// Remove the braces and trailing boolean so only the note text remains.
+	if strings.HasPrefix(s, "{") && strings.HasSuffix(s, "}") {
+		inner := strings.TrimSuffix(strings.TrimPrefix(s, "{"), "}")
+		inner = strings.TrimSuffix(inner, " true")
+		inner = strings.TrimSuffix(inner, " false")
+		inner = strings.TrimSpace(inner)
+		if inner == "" {
+			return "–"
+		}
+		return inner
+	}
 
-        return s
+	return s
 }
 
 func fmtF2(p *float64) string {
@@ -203,7 +203,7 @@ func or(a *int, def int) int {
 /* ───────────────────── Core app ───────────────────── */
 
 type App struct {
-	db  *pgxpool.Pool        // db is the PostgreSQL connection pool.
+	db  *pgxpool.Pool      // db is the PostgreSQL connection pool.
 	tpl *template.Template // tpl stores parsed HTML templates.
 }
 
@@ -220,14 +220,14 @@ func main() {
 
 	// Define custom functions for use within HTML templates.
 	funcs := template.FuncMap{
-		"fmtF2":      fmtF2,    // Formats a float64 pointer to a string with 1 decimal place, or "–" if nil.
-		"fmtInt":     fmtInt,   // Formats an int pointer to a string, or "–" if nil.
-		"safeHTML":   safeHTML, // Allows embedding unescaped HTML.
-		"mod":        mod,      // Modulo operator for template logic.
-		"todayStr":   todayStr, // Returns current date as "YYYY-MM-DD".
-		"formatNote": FormatNote, // Formats food log notes.
-		"sub":        sub,      // Subtracts two integers.
-		"or":         or,       // Returns the first value if not nil, otherwise the second.
+		"fmtF2":          fmtF2,          // Formats a float64 pointer to a string with 1 decimal place, or "–" if nil.
+		"fmtInt":         fmtInt,         // Formats an int pointer to a string, or "–" if nil.
+		"safeHTML":       safeHTML,       // Allows embedding unescaped HTML.
+		"mod":            mod,            // Modulo operator for template logic.
+		"todayStr":       todayStr,       // Returns current date as "YYYY-MM-DD".
+		"formatNote":     FormatNote,     // Formats food log notes.
+		"sub":            sub,            // Subtracts two integers.
+		"or":             or,             // Returns the first value if not nil, otherwise the second.
 		"fmtIntWithSign": fmtIntWithSign, // Formats an int pointer with sign.
 	}
 	// Parse HTML templates from embedded resources.
@@ -241,18 +241,21 @@ func main() {
 	// Initialize HTTP request multiplexer (router).
 	mux := http.NewServeMux()
 	// Register handlers for various URL paths.
-	mux.HandleFunc("/", app.handleIndex)             // Main page, shows daily summary and food log.
-	mux.HandleFunc("/log", app.handleLog)             // Handles form submissions for daily metrics.
-	mux.HandleFunc("/food", app.handleFood)           // Handles form submissions for food entries.
-	mux.HandleFunc("/api/bmi", app.handleBMI)                               // API: Returns BMI data for the last 30 days.
-	mux.HandleFunc("/api/log/weight", app.handleLogWeight)                   // API: Logs weight for a given date.
-	mux.HandleFunc("/api/log/calorie", app.handleLogCalorie)                 // API: Logs a calorie entry for a given date.
-	mux.HandleFunc("/api/log/cardio", app.handleLogCardio)                   // API: Logs cardio activity for a given date.
-	mux.HandleFunc("/api/log/mood", app.handleLogMood)                       // API: Logs mood for a given date.
-	mux.HandleFunc("/api/summary/daily", app.handleGetDailySummary)         // API: Returns daily summary for a given date.
-	mux.HandleFunc("/api/calories/today", app.handleGetCaloriesToday)       // API: Returns total calories logged for today.
+	mux.HandleFunc("/", app.handleIndex)                              // Main page, shows daily summary and food log.
+	mux.HandleFunc("/log", app.handleLog)                             // Handles form submissions for daily metrics.
+	mux.HandleFunc("/food", app.handleFood)                           // Handles form submissions for food entries.
+	mux.HandleFunc("/api/bmi", app.handleBMI)                         // API: Returns BMI data for the last 30 days.
+	mux.HandleFunc("/api/log/weight", app.handleLogWeight)            // API: Logs weight for a given date.
+	mux.HandleFunc("/api/log/calorie", app.handleLogCalorie)          // API: Logs a calorie entry for a given date.
+	mux.HandleFunc("/api/log/cardio", app.handleLogCardio)            // API: Logs cardio activity for a given date.
+	mux.HandleFunc("/api/log/mood", app.handleLogMood)                // API: Logs mood for a given date.
+	mux.HandleFunc("/api/summary/daily", app.handleGetDailySummary)   // API: Returns daily summary for a given date.
+	mux.HandleFunc("/api/calories/today", app.handleGetCaloriesToday) // API: Returns total calories logged for today.
 	mux.HandleFunc("/api/summary/weekly", app.handleGetWeeklySummary) // API: Returns weekly summary statistics.
-	mux.HandleFunc("/weekly", app.handleWeekly)                             // Renders the weekly summary page.
+	mux.HandleFunc("/weekly", app.handleWeekly)                       // Renders the weekly summary page.
+
+	// Serve static assets like compiled CSS
+	mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))
 
 	// Configure the HTTP server.
 	server := &http.Server{
