@@ -222,7 +222,15 @@ This section details the available API endpoints for interacting with the Health
         *   `v_weekly_stats` (a view for calculating weekly statistics)
     *   Refer to the data structures in `main.go` (e.g., `DailySummary`, `FoodEntry`) and the SQL queries for insights into the required schema.
 
-4.  **Build and Run the Go Application:**
+4.  **Install Node Dependencies & Build CSS:**
+    *   Tailwind CSS is compiled locally using npm:
+        ```bash
+        npm install
+        npm run build:css
+        ```
+    *   This generates `static/css/app.css` which is served by the Go app.
+
+5.  **Build and Run the Go Application:**
     *   From the root of the project directory:
         ```bash
         go build
