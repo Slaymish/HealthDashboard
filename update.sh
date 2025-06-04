@@ -8,6 +8,8 @@ SERVICE="healthdashboard.service"
 
 cd "$PROJECT_DIR"
 git pull --ff-only
+npm install
+npm run build:css
 sudo "$GO" build -o "$OUTPUT" .
 sudo systemctl restart "$SERVICE"
 echo "Service updated and restarted"
