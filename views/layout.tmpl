@@ -1,8 +1,17 @@
 <!doctype html>
-<html lang="en" class="dark scroll-smooth h-full">
+<html lang="en" class="scroll-smooth h-full">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <script>
+    (() => {
+      const t = localStorage.getItem('theme');
+      if (t === 'dark' || (!t && matchMedia('(prefers-color-scheme: dark)').matches)) {
+        document.documentElement.classList.add('dark');
+      }
+    })();
+  </script>
 
   <!-- Tailwind CDN – dark mode uses class strategy -->
   <script>
@@ -17,6 +26,7 @@
     :root      { --accent: #14b8a6; }         /* teal-500 for light mode */
     .dark      { --accent: #22d3ee; }         /* cyan-400 for dark mode */
     ::selection{ background: var(--accent); color: #fff; }
+    html { transition: background-color .2s, color .2s; }
   </style>
 </head>
 
@@ -28,6 +38,10 @@
       <h1 class="text-xl sm:text-2xl font-bold flex items-center gap-2">
         <span class="text-[1.4rem] sm:text-[1.6rem]">🩺</span> Health&nbsp;Dashboard
       </h1>
+      <button id="themeToggle" class="ml-4 w-9 h-9 rounded-full flex items-center justify-center bg-zinc-200 dark:bg-zinc-700 hover:bg-zinc-300 dark:hover:bg-zinc-600 transition" aria-label="Toggle theme">
+        <span class="block dark:hidden">🌙</span>
+        <span class="hidden dark:block">☀️</span>
+      </button>
     </div>
   </header>
 
@@ -56,6 +70,14 @@
       if (summaryEl) {
         // On page load, scroll summary panel so current day is visible
         summaryEl.scrollTop = summaryEl.scrollHeight;
+      }
+      const toggle = document.getElementById('themeToggle');
+      if (toggle) {
+        toggle.addEventListener('click', () => {
+          const root = document.documentElement;
+          root.classList.toggle('dark');
+          localStorage.setItem('theme', root.classList.contains('dark') ? 'dark' : 'light');
+        });
       }
     });
   </script>

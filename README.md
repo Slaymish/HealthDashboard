@@ -7,6 +7,7 @@ HealthDashboard is a personal web application designed for tracking various heal
 *   **Daily Logging:** Record daily weight, estimated and budgeted calories, mood, motivation, activity duration, and sleep duration.
 *   **Food Entry:** Log individual food items with calorie counts and notes for the current day.
 *   **Quick Add Food:** Quickly re-add frequently logged food items.
+*   **Dark Mode:** Switch between light and dark themes via the header toggle.
 *   **Visualizations & Summaries:**
     *   View a daily summary of all logged metrics.
     *   See a 7-day overview of key metrics.
