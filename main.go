@@ -146,19 +146,26 @@ type CaloriesTodayResponse struct {
 // FormatNote formats a food log note for display.
 // It handles sql.NullString and a specific string pattern.
 func FormatNote(note sql.NullString) string {
-	if !note.Valid || note.String == "" {
-		return "–"
-	}
-	s := note.String
-	if strings.HasPrefix(s, "{") && strings.HasSuffix(s, " true}") {
-		s = strings.TrimPrefix(s, "{")
-		s = strings.TrimSuffix(s, " true}")
-		if s == "" {
-			return "–"
-		}
-		return s
-	}
-	return s
+        if !note.Valid || note.String == "" {
+                return "–"
+        }
+
+        s := note.String
+
+        // Legacy exports sometimes look like `{Note text true}` or `{Note text false}`.
+        // Remove the braces and trailing boolean so only the note text remains.
+        if strings.HasPrefix(s, "{") && strings.HasSuffix(s, "}") {
+                inner := strings.TrimSuffix(strings.TrimPrefix(s, "{"), "}")
+                inner = strings.TrimSuffix(inner, " true")
+                inner = strings.TrimSuffix(inner, " false")
+                inner = strings.TrimSpace(inner)
+                if inner == "" {
+                        return "–"
+                }
+                return inner
+        }
+
+        return s
 }
 
 func fmtF2(p *float64) string {
