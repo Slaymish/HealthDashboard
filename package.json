@@ -1,0 +1,14 @@
+{
+  "name": "healthdashboard",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build:css": "tailwindcss -i ./assets/css/tailwind.css -o ./static/css/app.css --minify"
+  },
+  "devDependencies": {
+    "tailwindcss": "^3.4.4"
+  },
+  "dependencies": {
+    "@tailwindcss/typography": "^0.5.16"
+  }
+}
