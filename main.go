@@ -722,52 +722,70 @@ func (a *App) handleLog(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// handleFood handles POST requests to /food for logging new calorie entries.
-// It first ensures a `daily_logs` entry exists for the current day and user (hardcoded as 1),
-// then inserts the new food entry into `daily_calorie_entries`.
-// For HTMX requests, it returns two HTML fragments: the updated food list and
-// the updated summary section (marked for out-of-band swap).
-// For non-HTMX requests, it redirects to the home page.
+// handleFood handles POST and DELETE requests to /food.
+// POST logs a new calorie entry, ensuring a `daily_logs` record exists for the
+// current day (user_id hardcoded to 1). DELETE removes a calorie entry by ID.
+// For HTMX requests, both actions return the updated food list and the summary
+// fragment (the latter marked for out-of-band swap). Non-HTMX requests redirect
+// to the home page.
 func (a *App) handleFood(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	if r.Method != http.MethodPost {
-		http.Error(w, "method", 405)
-		return
-	}
-	if err := r.ParseForm(); err != nil {
-		http.Error(w, "bad form", 400)
-		return
-	}
 
-	// Validate calorie input.
-	calStr := r.FormValue("calories")
-	cal, err := strconv.Atoi(calStr)
-	if err != nil || cal < 0 { // Calories must be a non-negative integer.
-		http.Error(w, "calories", 400)
-		return
-	}
-	note := r.FormValue("note")
-	userID := 1 // Hardcoded userID.
+	switch r.Method {
+	case http.MethodPost:
+		if err := r.ParseForm(); err != nil {
+			http.Error(w, "bad form", 400)
+			return
+		}
 
-	// Get or create a log_id for today's entry.
-	// ON CONFLICT clause handles cases where the log entry might already exist.
-	var logID int
-	if err := a.db.QueryRow(ctx, `
-		INSERT INTO daily_logs (user_id, log_date)
-		VALUES ($1, CURRENT_DATE)
-		ON CONFLICT (user_id, log_date) DO UPDATE
-		SET log_date = EXCLUDED.log_date -- Effectively a 'DO NOTHING' that still returns log_id
-		RETURNING log_id`, userID).Scan(&logID); err != nil {
-		http.Error(w, err.Error(), 500)
-		return
-	}
+		// Validate calorie input.
+		calStr := r.FormValue("calories")
+		cal, err := strconv.Atoi(calStr)
+		if err != nil || cal < 0 {
+			http.Error(w, "calories", 400)
+			return
+		}
+		note := r.FormValue("note")
+		userID := 1
 
-	// Insert the new food entry. NULLIF is used to store empty notes as NULL.
-	_, err = a.db.Exec(ctx, `
-		INSERT INTO daily_calorie_entries (log_id, calories, note)
-		VALUES ($1, $2, NULLIF($3,''))`, logID, cal, note)
-	if err != nil {
-		http.Error(w, err.Error(), 500)
+		var logID int
+		if err := a.db.QueryRow(ctx, `
+                        INSERT INTO daily_logs (user_id, log_date)
+                        VALUES ($1, CURRENT_DATE)
+                        ON CONFLICT (user_id, log_date) DO UPDATE
+                        SET log_date = EXCLUDED.log_date
+                        RETURNING log_id`, userID).Scan(&logID); err != nil {
+			http.Error(w, err.Error(), 500)
+			return
+		}
+
+		if _, err = a.db.Exec(ctx, `
+                        INSERT INTO daily_calorie_entries (log_id, calories, note)
+                        VALUES ($1, $2, NULLIF($3,''))`, logID, cal, note); err != nil {
+			http.Error(w, err.Error(), 500)
+			return
+		}
+
+	case http.MethodDelete:
+		idStr := r.URL.Query().Get("id")
+		id, err := strconv.Atoi(idStr)
+		if err != nil || id <= 0 {
+			http.Error(w, "bad id", 400)
+			return
+		}
+		userID := 1
+		if _, err := a.db.Exec(ctx, `
+                        DELETE FROM daily_calorie_entries e
+                        USING daily_logs l
+                        WHERE e.log_id = l.log_id
+                          AND l.user_id = $1
+                          AND e.entry_id = $2`, userID, id); err != nil {
+			http.Error(w, err.Error(), 500)
+			return
+		}
+
+	default:
+		http.Error(w, "method", http.StatusMethodNotAllowed)
 		return
 	}
 

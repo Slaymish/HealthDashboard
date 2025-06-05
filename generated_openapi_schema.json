@@ -303,6 +303,43 @@
         }
       }
     }
+    ,
+    "/food": {
+      "post": {
+        "summary": "Log food entry",
+        "operationId": "logFood",
+        "requestBody": {
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "$ref": "#/components/schemas/FoodForm"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": { "description": "Food entry logged" },
+          "400": { "description": "Invalid form data" }
+        }
+      },
+      "delete": {
+        "summary": "Delete a food entry",
+        "operationId": "deleteFood",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "query",
+            "required": true,
+            "schema": { "type": "integer" }
+          }
+        ],
+        "responses": {
+          "200": { "description": "Food entry deleted" },
+          "400": { "description": "Invalid entry id" }
+        }
+      }
+    }
   },
   "components": {
     "schemas": {
@@ -388,6 +425,14 @@
           "total_estimated": { "type": "integer", "nullable": true, "description": "Total estimated calories burned for the week." },
           "total_budgeted": { "type": "integer", "nullable": true, "description": "Total budgeted calorie intake for the week." },
           "total_deficit": { "type": "integer", "nullable": true, "description": "Total calorie deficit for the week." }
+        }
+      },
+      "FoodForm": {
+        "type": "object",
+        "required": ["calories"],
+        "properties": {
+          "calories": { "type": "integer", "description": "Calorie value" },
+          "note": { "type": "string", "description": "Optional note" }
         }
       }
     }

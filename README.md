@@ -6,6 +6,7 @@ HealthDashboard is a personal web application designed for tracking various heal
 
 *   **Daily Logging:** Record daily weight, estimated and budgeted calories, mood, motivation, activity duration, and sleep duration.
 *   **Food Entry:** Log individual food items with calorie counts and notes for the current day.
+*   **Delete Entries:** Remove mistaken food logs directly from the table.
 *   **Quick Add Food:** Quickly re-add frequently logged food items.
 *   **Dark Mode:** Switch between light and dark themes via the header toggle.
 *   **Visualizations & Summaries:**
@@ -80,6 +81,13 @@ This section details the available API endpoints for interacting with the Health
         "message": "Calorie entry logged successfully"
     }
     ```
+
+### `DELETE /food`
+
+*   **Description:** Removes a previously logged food entry.
+*   **Request Parameters (query):**
+    *   `id` (integer, required): The entry ID to delete.
+*   **Response:** For HTMX requests, returns updated HTML fragments. Non-HTMX requests redirect to `/`.
 
 ### `POST /api/log/cardio`
 
