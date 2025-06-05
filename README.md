@@ -89,6 +89,27 @@ This section details the available API endpoints for interacting with the Health
     *   `id` (integer, required): The entry ID to delete.
 *   **Response:** For HTMX requests, returns updated HTML fragments. Non-HTMX requests redirect to `/`.
 
+### `POST /food`
+
+*   **Description:** Logs a food entry for the current day.
+*   **Form Fields:**
+    *   `calories` (integer, required): Calorie amount.
+    *   `note` (string, optional): Additional note.
+*   **Example Request (HTMX):**
+    ```bash
+    curl -H "HX-Request: true" -d "calories=200&note=Snack" http://localhost:8181/food
+    ```
+*   **Example Response (HTMX):** Updated HTML fragments:
+    ```html
+    <div id="foodList">…</div>
+    <div id="summary" hx-swap-oob="outerHTML">…</div>
+    ```
+*   **Example Request (Non-HTMX):**
+    ```bash
+    curl -d "calories=200&note=Snack" http://localhost:8181/food -v
+    ```
+*   **Example Response (Non-HTMX):** Redirects to `/` with HTTP 303.
+
 ### `POST /api/log/cardio`
 
 *   **Description:** Logs cardio activity duration for a specific date. The duration is added to any existing activity for that day.
