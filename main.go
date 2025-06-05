@@ -493,6 +493,7 @@ func (a *App) calculateGoalProjection(ctx context.Context, milestone, goal float
 		MilestoneWeight: milestone,
 		GoalWeight:      goal,
 	}
+
 	if dailyRate == 0 {
 		return gp, nil
 	}
@@ -504,6 +505,7 @@ func (a *App) calculateGoalProjection(ctx context.Context, milestone, goal float
 			gp.MilestoneDays = &days
 			gp.MilestoneDate = &t
 			gp.MilestoneFormula = fmt.Sprintf("(%.1f - %.1f)/%.3f = %d days", milestone, current, dailyRate, days)
+
 		}
 	}
 	if current > goal && dailyRate < 0 {
