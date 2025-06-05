@@ -1,0 +1,35 @@
+<div class="bg-white dark:bg-zinc-900 rounded-2xl shadow p-5 sm:p-6 overflow-x-auto relative">
+  <h2 class="font-semibold text-base sm:text-lg mb-4">Weight Goals</h2>
+  <details class="absolute top-2 right-2 text-xs">
+    <summary class="cursor-pointer select-none">?</summary>
+    <div class="mt-2 p-2 bg-zinc-50 dark:bg-zinc-800 rounded shadow w-64 space-y-1">
+      <p>Trend: {{ printf "%.3f" .DailyChange }} kg/day</p>
+      {{ if .MilestoneDays }}<p>{{ .MilestoneFormula }}</p>{{ end }}
+      {{ if .GoalDays }}<p>{{ .GoalFormula }}</p>{{ end }}
+    </div>
+  </details>
+  <table class="w-full text-sm">
+    <tbody class="divide-y divide-zinc-200 dark:divide-zinc-800">
+      <tr>
+        <td class="py-2">Current</td>
+        <td class="py-2 text-right">{{ printf "%.1f" .CurrentWeight }} kg</td>
+      </tr>
+      <tr>
+        <td class="py-2">63kg milestone</td>
+        <td class="py-2 text-right">
+          {{ if .MilestoneDays }}{{ .MilestoneDays }} days
+            <span class="text-xs text-zinc-500">({{ .MilestoneDate.Format "02 Jan" }})</span>
+          {{ else }}–{{ end }}
+        </td>
+      </tr>
+      <tr>
+        <td class="py-2">60kg goal</td>
+        <td class="py-2 text-right">
+          {{ if .GoalDays }}{{ .GoalDays }} days
+            <span class="text-xs text-zinc-500">({{ .GoalDate.Format "02 Jan" }})</span>
+          {{ else }}–{{ end }}
+        </td>
+      </tr>
+    </tbody>
+  </table>
+</div>
