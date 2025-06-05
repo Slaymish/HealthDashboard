@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"html/template"
 	"log"
+	"math"
 	"net/http"
 	"os"
 	"os/signal"
@@ -73,6 +74,16 @@ type Weekly struct {
 	TotalDeficit   *int      `json:"total_deficit,omitempty"`
 }
 
+// GoalProjection holds estimated timeframes for reaching weight goals based on
+// recent weight trends.
+type GoalProjection struct {
+	CurrentWeight float64
+	MilestoneDays *int
+	MilestoneDate *time.Time
+	GoalDays      *int
+	GoalDate      *time.Time
+}
+
 // PageData is the primary data structure passed to HTML templates for rendering views.
 // It aggregates various pieces of data needed for the UI.
 type PageData struct {
@@ -80,6 +91,7 @@ type PageData struct {
 	Summary  []DailySummary
 	Food     []FoodEntry
 	QuickAdd []QuickAddItem
+	Goals    *GoalProjection
 }
 
 // WeightLogRequest defines the expected JSON payload for logging weight.
@@ -419,6 +431,81 @@ func (a *App) fetchQuickAdd(ctx context.Context) ([]QuickAddItem, error) {
 	return out, rows.Err()
 }
 
+// weightTrend calculates the average daily weight change over the last 30 days.
+// It returns the most recent weight and the change per day (positive or negative).
+// If insufficient data is available, rate will be 0.
+func (a *App) weightTrend(ctx context.Context) (current float64, rate float64, err error) {
+	rows, err := a.db.Query(ctx, `
+                SELECT log_date, weight_kg FROM (
+                        SELECT log_date, weight_kg
+                          FROM v_daily_summary
+                         WHERE user_id = 1 AND weight_kg IS NOT NULL
+                         ORDER BY log_date DESC
+                         LIMIT 30
+                ) t ORDER BY log_date`)
+	if err != nil {
+		return 0, 0, err
+	}
+	defer rows.Close()
+
+	type entry struct {
+		dt time.Time
+		w  float64
+	}
+	var data []entry
+	for rows.Next() {
+		var e entry
+		if err := rows.Scan(&e.dt, &e.w); err != nil {
+			return 0, 0, err
+		}
+		data = append(data, e)
+	}
+	if len(data) == 0 {
+		return 0, 0, nil
+	}
+	current = data[len(data)-1].w
+	if len(data) < 2 {
+		return current, 0, nil
+	}
+	first := data[0]
+	days := data[len(data)-1].dt.Sub(first.dt).Hours() / 24
+	if days == 0 {
+		return current, 0, nil
+	}
+	rate = (current - first.w) / days
+	return current, rate, nil
+}
+
+// calculateGoalProjection returns estimated dates to reach milestone and final weight goals.
+func (a *App) calculateGoalProjection(ctx context.Context, milestone, goal float64) (*GoalProjection, error) {
+	current, dailyRate, err := a.weightTrend(ctx)
+	if err != nil {
+		return nil, err
+	}
+	gp := &GoalProjection{CurrentWeight: current}
+	if dailyRate == 0 {
+		return gp, nil
+	}
+	now := time.Now()
+	if current > milestone && dailyRate < 0 {
+		days := int(math.Ceil((milestone - current) / dailyRate))
+		if days >= 0 {
+			t := now.Add(time.Duration(days) * 24 * time.Hour)
+			gp.MilestoneDays = &days
+			gp.MilestoneDate = &t
+		}
+	}
+	if current > goal && dailyRate < 0 {
+		days := int(math.Ceil((goal - current) / dailyRate))
+		if days >= 0 {
+			t := now.Add(time.Duration(days) * 24 * time.Hour)
+			gp.GoalDays = &days
+			gp.GoalDate = &t
+		}
+	}
+	return gp, nil
+}
+
 // fetchSingleDaySummary retrieves the DailySummary for a specific date and user.
 // If no data exists for that date, it returns a DailySummary with only LogDate set,
 // and other fields as nil. This is not considered an error (sql.ErrNoRows is handled).
@@ -528,12 +615,18 @@ func (a *App) handleIndex(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	goals, err := a.calculateGoalProjection(ctx, 63, 60)
+	if err != nil {
+		log.Printf("Error calculating goals: %v", err)
+	}
+
 	// Prepare data for the template.
 	data := PageData{
 		Pivot:    pivot,
 		Summary:  summary,
 		Food:     foods,
 		QuickAdd: quick,
+		Goals:    goals,
 	}
 	// Render the main index template.
 	if err := a.tpl.ExecuteTemplate(w, "index.tmpl", data); err != nil {
