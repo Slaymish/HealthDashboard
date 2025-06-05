@@ -263,6 +263,33 @@
         }
       }
     },
+    "/api/food": {
+      "get": {
+        "summary": "Get today's food entries",
+        "operationId": "getFood",
+        "responses": {
+          "200": {
+            "description": "List of food entries for today",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/FoodEntry"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error retrieving food entries",
+            "content": {
+              "application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}
+            }
+          }
+        }
+      }
+    },
     "/api/summary/weekly": {
       "get": {
         "summary": "Get weekly summary of metrics",
@@ -425,6 +452,15 @@
           "total_estimated": { "type": "integer", "nullable": true, "description": "Total estimated calories burned for the week." },
           "total_budgeted": { "type": "integer", "nullable": true, "description": "Total budgeted calorie intake for the week." },
           "total_deficit": { "type": "integer", "nullable": true, "description": "Total calorie deficit for the week." }
+        }
+      },
+      "FoodEntry": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer" },
+          "created_at": { "type": "string", "format": "date-time" },
+          "calories": { "type": "integer" },
+          "note": { "type": "string", "nullable": true }
         }
       },
       "FoodForm": {

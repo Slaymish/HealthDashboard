@@ -169,6 +169,22 @@ This section details the available API endpoints for interacting with the Health
     }
     ```
 
+### `GET /api/food`
+
+*   **Description:** Retrieves all food entries logged for the current day.
+*   **Request Parameters:** None.
+*   **Example JSON Response:**
+    ```json
+    [
+        {
+            "id": 1,
+            "created_at": "2023-10-28T12:00:00Z",
+            "calories": 250,
+            "note": "Banana"
+        }
+    ]
+    ```
+
 ### `GET /api/summary/weekly`
 
 *   **Description:** Retrieves a weekly summary of key statistics.
