@@ -77,11 +77,16 @@ type Weekly struct {
 // GoalProjection holds estimated timeframes for reaching weight goals based on
 // recent weight trends.
 type GoalProjection struct {
-	CurrentWeight float64
-	MilestoneDays *int
-	MilestoneDate *time.Time
-	GoalDays      *int
-	GoalDate      *time.Time
+	CurrentWeight    float64
+	DailyChange      float64
+	MilestoneWeight  float64
+	MilestoneDays    *int
+	MilestoneDate    *time.Time
+	MilestoneFormula string
+	GoalWeight       float64
+	GoalDays         *int
+	GoalDate         *time.Time
+	GoalFormula      string
 }
 
 // PageData is the primary data structure passed to HTML templates for rendering views.
@@ -482,7 +487,13 @@ func (a *App) calculateGoalProjection(ctx context.Context, milestone, goal float
 	if err != nil {
 		return nil, err
 	}
-	gp := &GoalProjection{CurrentWeight: current}
+	gp := &GoalProjection{
+		CurrentWeight:   current,
+		DailyChange:     dailyRate,
+		MilestoneWeight: milestone,
+		GoalWeight:      goal,
+	}
+
 	if dailyRate == 0 {
 		return gp, nil
 	}
@@ -493,6 +504,8 @@ func (a *App) calculateGoalProjection(ctx context.Context, milestone, goal float
 			t := now.Add(time.Duration(days) * 24 * time.Hour)
 			gp.MilestoneDays = &days
 			gp.MilestoneDate = &t
+			gp.MilestoneFormula = fmt.Sprintf("(%.1f - %.1f)/%.3f = %d days", milestone, current, dailyRate, days)
+
 		}
 	}
 	if current > goal && dailyRate < 0 {
@@ -501,6 +514,7 @@ func (a *App) calculateGoalProjection(ctx context.Context, milestone, goal float
 			t := now.Add(time.Duration(days) * 24 * time.Hour)
 			gp.GoalDays = &days
 			gp.GoalDate = &t
+			gp.GoalFormula = fmt.Sprintf("(%.1f - %.1f)/%.3f = %d days", goal, current, dailyRate, days)
 		}
 	}
 	return gp, nil
