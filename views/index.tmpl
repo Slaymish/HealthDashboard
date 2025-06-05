@@ -10,6 +10,11 @@
     <!-- BMI trend chart card -->
     {{ template "bmi_chart.tmpl" . }}
 
+    <!-- Goal projection card -->
+    {{ if .Goals }}
+    {{ template "goals.tmpl" .Goals }}
+    {{ end }}
+
     <!-- Weekly stats card (loads via HTMX) -->
     <div class="bg-white dark:bg-zinc-900 rounded-2xl shadow shadow-zinc-200 dark:shadow-zinc-900/40 p-5 sm:p-6"
          hx-get="/weekly" hx-trigger="load every 10m" hx-swap="outerHTML">
