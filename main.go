@@ -268,6 +268,7 @@ func main() {
 	mux.HandleFunc("/api/log/mood", app.handleLogMood)                // API: Logs mood for a given date.
 	mux.HandleFunc("/api/summary/daily", app.handleGetDailySummary)   // API: Returns daily summary for a given date.
 	mux.HandleFunc("/api/calories/today", app.handleGetCaloriesToday) // API: Returns total calories logged for today.
+	mux.HandleFunc("/api/food", app.handleGetFood)                    // API: Returns today's food entries.
 	mux.HandleFunc("/api/summary/weekly", app.handleGetWeeklySummary) // API: Returns weekly summary statistics.
 	mux.HandleFunc("/weekly", app.handleWeekly)                       // Renders the weekly summary page.
 
@@ -1320,6 +1321,49 @@ func (a *App) handleGetCaloriesToday(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(response)
+}
+
+// handleGetFood handles GET requests to /api/food.
+// It returns all calorie entries for the current day for user 1 as JSON.
+func (a *App) handleGetFood(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	if r.Method != http.MethodGet {
+		http.Error(w, "Only GET method is allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	entries, err := a.fetchFood(ctx)
+	if err != nil {
+		log.Printf("Error fetching food entries: %v", err)
+		http.Error(w, "Error fetching food entries", http.StatusInternalServerError)
+		return
+	}
+
+	// Convert to a structure suited for JSON output so sql.NullString becomes *string.
+	type apiEntry struct {
+		ID        int       `json:"id"`
+		CreatedAt time.Time `json:"created_at"`
+		Calories  int       `json:"calories"`
+		Note      *string   `json:"note,omitempty"`
+	}
+
+	out := make([]apiEntry, 0, len(entries))
+	for _, e := range entries {
+		var note *string
+		if e.Note.Valid {
+			note = &e.Note.String
+		}
+		out = append(out, apiEntry{
+			ID:        e.ID,
+			CreatedAt: e.CreatedAt,
+			Calories:  e.Calories,
+			Note:      note,
+		})
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(out)
 }
 
 // handleGetWeeklySummary handles GET requests to /api/summary/weekly.
