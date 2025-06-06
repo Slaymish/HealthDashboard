@@ -255,25 +255,22 @@ func main() {
 	// Create an App instance containing the DB pool and templates.
 	app := &App{db: pool, tpl: tpl}
 
-	// Initialize HTTP request multiplexer (router).
-	mux := http.NewServeMux()
-	// Register handlers for various URL paths.
-	mux.HandleFunc("/", app.handleIndex)                              // Main page, shows daily summary and food log.
-	mux.HandleFunc("/log", app.handleLog)                             // Handles form submissions for daily metrics.
-	mux.HandleFunc("/food", app.handleFood)                           // Handles form submissions for food entries.
-	mux.HandleFunc("/api/bmi", app.handleBMI)                         // API: Returns BMI data for the last 30 days.
-	mux.HandleFunc("/api/log/weight", app.handleLogWeight)            // API: Logs weight for a given date.
-	mux.HandleFunc("/api/log/calorie", app.handleLogCalorie)          // API: Logs a calorie entry for a given date.
-	mux.HandleFunc("/api/log/cardio", app.handleLogCardio)            // API: Logs cardio activity for a given date.
-	mux.HandleFunc("/api/log/mood", app.handleLogMood)                // API: Logs mood for a given date.
-	mux.HandleFunc("/api/summary/daily", app.handleGetDailySummary)   // API: Returns daily summary for a given date.
-	mux.HandleFunc("/api/calories/today", app.handleGetCaloriesToday) // API: Returns total calories logged for today.
-	mux.HandleFunc("/api/food", app.handleGetFood)                    // API: Returns today's food entries.
-	mux.HandleFunc("/api/summary/weekly", app.handleGetWeeklySummary) // API: Returns weekly summary statistics.
-	mux.HandleFunc("/weekly", app.handleWeekly)                       // Renders the weekly summary page.
+	// Initialize HTTP request multiplexers.
+	uiMux := http.NewServeMux()  // Serves UI and API endpoints on the main address.
+	apiMux := http.NewServeMux() // API-only server for MCP.
 
-	// Serve static assets like compiled CSS
-	mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))
+	// Register UI handlers on the main multiplexer.
+	uiMux.HandleFunc("/", app.handleIndex)        // Main page, shows daily summary and food log.
+	uiMux.HandleFunc("/log", app.handleLog)       // Handles form submissions for daily metrics.
+	uiMux.HandleFunc("/food", app.handleFood)     // Handles form submissions for food entries.
+	uiMux.HandleFunc("/weekly", app.handleWeekly) // Renders the weekly summary page.
+
+	// Register API endpoints on both multiplexers.
+	registerAPIRoutes(uiMux, app)
+	registerAPIRoutes(apiMux, app)
+
+	// Serve static assets like compiled CSS on the main server only.
+	uiMux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))
 
 	// Determine addresses for the regular and MCP servers.
 	addr := os.Getenv("ADDR")
@@ -286,7 +283,7 @@ func main() {
 	// Configure the HTTP server used for the main instance.
 	server := &http.Server{
 		Addr:    addr,
-		Handler: mux,
+		Handler: uiMux,
 	}
 
 	// Configure the MCP server only if an address is provided.
@@ -294,7 +291,7 @@ func main() {
 	if mcpAddr != "" {
 		mcpServer = &http.Server{
 			Addr:    mcpAddr,
-			Handler: mux,
+			Handler: apiMux,
 		}
 	}
 
@@ -330,6 +327,20 @@ func main() {
 	if mcpServer != nil {
 		_ = mcpServer.Shutdown(ctx)
 	}
+}
+
+// registerAPIRoutes attaches all API endpoint handlers to the provided mux.
+// It is used for both the main server and the API-only MCP server.
+func registerAPIRoutes(mux *http.ServeMux, app *App) {
+	mux.HandleFunc("/api/bmi", app.handleBMI)
+	mux.HandleFunc("/api/log/weight", app.handleLogWeight)
+	mux.HandleFunc("/api/log/calorie", app.handleLogCalorie)
+	mux.HandleFunc("/api/log/cardio", app.handleLogCardio)
+	mux.HandleFunc("/api/log/mood", app.handleLogMood)
+	mux.HandleFunc("/api/summary/daily", app.handleGetDailySummary)
+	mux.HandleFunc("/api/calories/today", app.handleGetCaloriesToday)
+	mux.HandleFunc("/api/food", app.handleGetFood)
+	mux.HandleFunc("/api/summary/weekly", app.handleGetWeeklySummary)
 }
 
 /* ───────────────────── DB helpers ───────────────────── */
