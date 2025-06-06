@@ -1352,7 +1352,8 @@ func (a *App) handleGetFood(w http.ResponseWriter, r *http.Request) {
 	for _, e := range entries {
 		var note *string
 		if e.Note.Valid {
-			note = &e.Note.String
+			noteVal := e.Note.String
+			note = &noteVal
 		}
 		out = append(out, apiEntry{
 			ID:        e.ID,
