@@ -18,6 +18,7 @@ HealthDashboard is a personal web application designed for tracking various heal
 ## API Endpoints
 
 This section details the available API endpoints for interacting with the HealthDashboard programmatically.
+When running on your MCP server, the base URL is `https://mcp.taildb558.ts.net` and only the API endpoints are served.
 
 ### `GET /api/bmi`
 
@@ -253,9 +254,13 @@ This section details the available API endpoints for interacting with the Health
         ```bash
         cp .env.template .env
         ```
-    *   Edit the `.env` file and set your `DATABASE_URL`:
+    *   Edit the `.env` file and set your connection details and server addresses:
         ```
         DATABASE_URL=postgres://youruser:yourpassword@yourhost:yourport/yourdatabase
+        # Address for the main server (default :8181)
+        ADDR=:8181
+        # Optional second server for MCP (serves API only)
+        MCP_ADDR=:8282
         ```
 
 3.  **Database Schema:**
@@ -281,7 +286,8 @@ This section details the available API endpoints for interacting with the Health
         go build
         ./HealthDashboard
         ```
-    *   The application will start, and by default, listen on port `:8181`.
+    *   The application will start and listen on the address specified by `ADDR` (default `:8181`).
+        If `MCP_ADDR` is set, a second server will also start on that address and expose only the API endpoints.
 
 ## Python Import Script (`logs.py`)
 

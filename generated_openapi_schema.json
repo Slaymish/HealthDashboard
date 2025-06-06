@@ -9,6 +9,10 @@
     {
       "url": "https://raspberrypi.taildb558.ts.net",
       "description": "Local instance of HealthDashboard on Raspberry Pi"
+    },
+    {
+      "url": "https://mcp.taildb558.ts.net",
+      "description": "MCP server instance (API only)"
     }
   ],
   "paths": {
