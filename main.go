@@ -275,19 +275,46 @@ func main() {
 	// Serve static assets like compiled CSS
 	mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))
 
-	// Configure the HTTP server.
+	// Determine addresses for the regular and MCP servers.
+	addr := os.Getenv("ADDR")
+	if addr == "" {
+		addr = ":8181" // default address for regular server
+	}
+
+	mcpAddr := os.Getenv("MCP_ADDR") // optional second server
+
+	// Configure the HTTP server used for the main instance.
 	server := &http.Server{
-		Addr:    ":8181", // Server listens on port 8181.
+		Addr:    addr,
 		Handler: mux,
 	}
 
-	// Start the HTTP server in a new goroutine.
+	// Configure the MCP server only if an address is provided.
+	var mcpServer *http.Server
+	if mcpAddr != "" {
+		mcpServer = &http.Server{
+			Addr:    mcpAddr,
+			Handler: mux,
+		}
+	}
+
+	// Start the primary HTTP server in a new goroutine.
 	go func() {
-		log.Println("Listening on :8181")
+		log.Printf("Listening on %s", addr)
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("http: %v", err) // Log fatal error if server fails to start (excluding ErrServerClosed).
 		}
 	}()
+
+	// Start the MCP server if configured.
+	if mcpServer != nil {
+		go func() {
+			log.Printf("Listening on MCP %s", mcpAddr)
+			if err := mcpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				log.Fatalf("http(mcp): %v", err)
+			}
+		}()
+	}
 
 	// Graceful shutdown setup.
 	// Listen for interrupt (Ctrl-C) or SIGTERM signals.
@@ -300,6 +327,9 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	_ = server.Shutdown(ctx) // Attempt to gracefully shut down the server.
+	if mcpServer != nil {
+		_ = mcpServer.Shutdown(ctx)
+	}
 }
 
 /* ───────────────────── DB helpers ───────────────────── */
