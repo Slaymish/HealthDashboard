@@ -62,12 +62,32 @@
 
   <!-- Custom script: auto-scroll behavior for panels -->
   <script>
+    function applyColumnPrefs() {
+      const form = document.getElementById('columnForm');
+      if (!form) return;
+      const allCols = Array.from(form.querySelectorAll('input')).map(i => i.dataset.col);
+      const saved = JSON.parse(localStorage.getItem('pivotColumns') || 'null') || allCols;
+      form.querySelectorAll('input').forEach(cb => {
+        cb.checked = saved.includes(cb.dataset.col);
+      });
+      allCols.forEach(col => {
+        const visible = saved.includes(col);
+        document.querySelectorAll('.col-' + col).forEach(el => {
+          el.style.display = visible ? '' : 'none';
+        });
+      });
+    }
+
     document.body.addEventListener('htmx:afterSwap', (e) => {
       if (e.detail.target.id === 'foodList') {
         // After food list updates, scroll it to bottom
         e.detail.target.scrollTop = e.detail.target.scrollHeight;
       }
+      if (e.detail.target.id === 'summary') {
+        applyColumnPrefs();
+      }
     });
+
     document.addEventListener('DOMContentLoaded', () => {
       const summaryEl = document.getElementById('summary');
       if (summaryEl) {
@@ -82,6 +102,15 @@
           localStorage.setItem('theme', root.classList.contains('dark') ? 'dark' : 'light');
         });
       }
+      const form = document.getElementById('columnForm');
+      if (form) {
+        form.addEventListener('change', () => {
+          const selected = Array.from(form.querySelectorAll('input:checked')).map(cb => cb.dataset.col);
+          localStorage.setItem('pivotColumns', JSON.stringify(selected));
+          applyColumnPrefs();
+        });
+      }
+      applyColumnPrefs();
     });
   </script>
 </body>

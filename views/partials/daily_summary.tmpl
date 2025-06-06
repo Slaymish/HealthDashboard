@@ -1,35 +1,35 @@
 <table class="w-full text-sm border-collapse">
   <thead class="sticky top-0 backdrop-blur bg-white/70 dark:bg-zinc-950/70">
     <tr class="border-b border-zinc-200 dark:border-zinc-800 text-left">
-      <th class="py-3 px-4">Date</th>
-      <th class="px-4">Weight</th>
-      <th class="px-4">kcal est / bud</th>
-      <th class="px-4">Net Kcal</th>
-      <th class="px-4">Mood</th>
-      <th class="px-4">Activity</th>
+      <th class="py-3 px-4 col-date">Date</th>
+      <th class="px-4 col-weight">Weight</th>
+      <th class="px-4 col-kcal">kcal est / bud</th>
+      <th class="px-4 col-netkcal">Net Kcal</th>
+      <th class="px-4 col-mood">Mood</th>
+      <th class="px-4 col-activity">Activity</th>
     </tr>
   </thead>
   <tbody>
     {{ range $i, $row := . }}
     {{ $isToday := eq ($row.LogDate.Format "2006-01-02") (todayStr) }}
     <tr class="{{ if $isToday }}bg-[var(--accent)] text-white dark:text-black font-medium{{ else }}{{ if mod $i 2 }}bg-zinc-50 dark:bg-zinc-900{{ end }} hover:bg-zinc-100 dark:hover:bg-zinc-800{{ end }} border-b border-zinc-100 dark:border-zinc-800">
-      <td class="py-3 px-4 whitespace-nowrap" {{ if $isToday }}aria-current="date"{{ end }}>
+      <td class="py-3 px-4 whitespace-nowrap col-date" {{ if $isToday }}aria-current="date"{{ end }}>
         {{ $row.LogDate.Format "02 Jan" }}
       </td>
-      <td class="px-4 tabular-nums">{{ fmtF2 $row.WeightKg }}kg</td>
-      <td class="px-4 tabular-nums">
+      <td class="px-4 tabular-nums col-weight">{{ fmtF2 $row.WeightKg }}kg</td>
+      <td class="px-4 tabular-nums col-kcal">
         {{ if $row.KcalEstimated }}{{ fmtInt $row.KcalEstimated }}{{ end }}
         {{ if $row.KcalBudgeted }} / {{ fmtInt $row.KcalBudgeted }}{{ end }}
       </td>
-      <td class="px-4 tabular-nums">
+      <td class="px-4 tabular-nums col-netkcal">
         {{ if and $row.KcalEstimated $row.KcalBudgeted }}
           {{ printf "%+d" (sub (or $row.KcalEstimated 0) (or $row.KcalBudgeted 0)) }}
         {{ else }}
           –
         {{ end }}
       </td>
-      <td class="px-4 tabular-nums">{{ fmtInt $row.Mood }}</td>
-      <td class="px-4 tabular-nums">{{ fmtInt $row.TotalActivityMin }}</td>
+      <td class="px-4 tabular-nums col-mood">{{ fmtInt $row.Mood }}</td>
+      <td class="px-4 tabular-nums col-activity">{{ fmtInt $row.TotalActivityMin }}</td>
     </tr>
     {{ end }}
   </tbody>
