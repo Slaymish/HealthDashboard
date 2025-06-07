@@ -623,7 +623,7 @@ func (a *App) handleGetWeeklySummary(w http.ResponseWriter, r *http.Request) {
 func (a *App) handleLogin(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		data := struct{ Error string }{}
+		data := PageData{}
 		_ = a.tpl.ExecuteTemplate(w, "login.tmpl", data)
 	case http.MethodPost:
 		if err := r.ParseForm(); err != nil {
@@ -634,7 +634,7 @@ func (a *App) handleLogin(w http.ResponseWriter, r *http.Request) {
 			http.SetCookie(w, &http.Cookie{Name: "pin", Value: "1234", Path: "/", Expires: time.Now().Add(365 * 24 * time.Hour), HttpOnly: true})
 			http.Redirect(w, r, "/", http.StatusSeeOther)
 		} else {
-			data := struct{ Error string }{Error: "Invalid PIN"}
+			data := PageData{Error: "Invalid PIN"}
 			_ = a.tpl.ExecuteTemplate(w, "login.tmpl", data)
 		}
 	default:
