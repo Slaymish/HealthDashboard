@@ -1,6 +1,7 @@
 {{ template "layout.tmpl" . }}
 
 {{ define "content" }}
+<div id="dash" class="{{ if .ShowLogin }}filter blur-sm pointer-events-none{{ end }}">
 <div class="grid grid-cols-1 gap-6 sm:gap-8 md:grid-cols-3">
   <!-- Main content: data tables and charts -->
   <div class="space-y-8 md:col-span-3">
@@ -50,5 +51,9 @@
     </div>
   </div>
 </details>
+</div>
+{{ if .ShowLogin }}
+  {{ template "login_panel.tmpl" . }}
+{{ end }}
 {{ end }}
 
