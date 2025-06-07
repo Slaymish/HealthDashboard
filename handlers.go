@@ -20,20 +20,17 @@ func (a *App) handleIndex(w http.ResponseWriter, r *http.Request) {
 	}
 	summary, err := a.fetchSummary(ctx, pivot, 3)
 	if err != nil {
-		logger.Error("fetch summary", "err", err)
-		http.Error(w, "Error fetching summary data", http.StatusInternalServerError)
+		respondErr(w, http.StatusInternalServerError, "Error fetching summary data", err)
 		return
 	}
 	foods, err := a.fetchFood(ctx)
 	if err != nil {
-		logger.Error("fetch food", "err", err)
-		http.Error(w, "Error fetching food data", http.StatusInternalServerError)
+		respondErr(w, http.StatusInternalServerError, "Error fetching food data", err)
 		return
 	}
 	quick, err := a.fetchQuickAdd(ctx)
 	if err != nil {
-		logger.Error("fetch quick add", "err", err)
-		http.Error(w, "Error fetching quick add data", http.StatusInternalServerError)
+		respondErr(w, http.StatusInternalServerError, "Error fetching quick add data", err)
 		return
 	}
 	goals, err := a.calculateGoalProjection(ctx, 63, 60)
@@ -48,8 +45,7 @@ func (a *App) handleIndex(w http.ResponseWriter, r *http.Request) {
 		Goals:    goals,
 	}
 	if err := a.tpl.ExecuteTemplate(w, "index.tmpl", data); err != nil {
-		logger.Error("render index", "err", err)
-		http.Error(w, "Error rendering page", http.StatusInternalServerError)
+		respondErr(w, http.StatusInternalServerError, "Error rendering page", err)
 	}
 }
 
@@ -88,8 +84,7 @@ func (a *App) handleLog(w http.ResponseWriter, r *http.Request) {
 	sum, _ := a.fetchSummary(ctx, time.Now(), 3)
 	var out strings.Builder
 	if err := a.tpl.ExecuteTemplate(&out, "summary_partial.tmpl", sum); err != nil {
-		logger.Error("render summary partial", "err", err)
-		http.Error(w, "Error rendering", http.StatusInternalServerError)
+		respondErr(w, http.StatusInternalServerError, "Error rendering", err)
 		return
 	}
 	fmt.Fprint(w, out.String())
@@ -116,13 +111,13 @@ func (a *App) handleFood(w http.ResponseWriter, r *http.Request) {
                         VALUES ($1, CURRENT_DATE)
                         ON CONFLICT (user_id, log_date) DO UPDATE SET log_date = EXCLUDED.log_date
                         RETURNING log_id`, userID).Scan(&logID); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			respondErr(w, http.StatusInternalServerError, "Database error", err)
 			return
 		}
 		if _, err = a.db.Exec(ctx, `
                         INSERT INTO daily_calorie_entries (log_id, calories, note)
                         VALUES ($1, $2, NULLIF($3,''))`, logID, cal, note); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			respondErr(w, http.StatusInternalServerError, "Database error", err)
 			return
 		}
 	case http.MethodDelete:
@@ -138,7 +133,7 @@ func (a *App) handleFood(w http.ResponseWriter, r *http.Request) {
                         WHERE e.log_id = l.log_id
                           AND l.user_id = $1
                           AND e.entry_id = $2`, userID, id); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			respondErr(w, http.StatusInternalServerError, "Database error", err)
 			return
 		}
 	default:
@@ -153,13 +148,11 @@ func (a *App) handleFood(w http.ResponseWriter, r *http.Request) {
 	sum, _ := a.fetchSummary(ctx, time.Now(), 3)
 	var foodHTML, sumHTML strings.Builder
 	if err := a.tpl.ExecuteTemplate(&foodHTML, "food.tmpl", foods); err != nil {
-		logger.Error("render food", "err", err)
-		http.Error(w, "Error rendering food entries", http.StatusInternalServerError)
+		respondErr(w, http.StatusInternalServerError, "Error rendering food entries", err)
 		return
 	}
 	if err := a.tpl.ExecuteTemplate(&sumHTML, "summary_partial.tmpl", sum); err != nil {
-		logger.Error("render summary partial for food", "err", err)
-		http.Error(w, "Error rendering summary partial", http.StatusInternalServerError)
+		respondErr(w, http.StatusInternalServerError, "Error rendering summary partial", err)
 		return
 	}
 	summaryFrag := strings.Replace(sumHTML.String(), `id="summary"`, `id="summary" hx-swap-oob="outerHTML"`, 1)
@@ -180,7 +173,7 @@ func (a *App) handleBMI(w http.ResponseWriter, r *http.Request) {
     ORDER BY d.dt;`
 	rows, err := a.db.Query(ctx, sql, 1)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		respondErr(w, http.StatusInternalServerError, "Database error", err)
 		return
 	}
 	defer rows.Close()
@@ -188,7 +181,7 @@ func (a *App) handleBMI(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var b BMI
 		if err := rows.Scan(&b.LogDate, &b.Value); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			respondErr(w, http.StatusInternalServerError, "Database error", err)
 			return
 		}
 		series = append(series, b)
@@ -211,21 +204,18 @@ func (a *App) handleWeekly(w http.ResponseWriter, r *http.Request) {
 			var currentWeekStart time.Time
 			errDateTrunc := a.db.QueryRow(ctx, `SELECT date_trunc('week', CURRENT_DATE);`).Scan(&currentWeekStart)
 			if errDateTrunc != nil {
-				logger.Error("fetch week start for empty view", "err", errDateTrunc)
-				http.Error(w, "Error preparing weekly data", http.StatusInternalServerError)
+				respondErr(w, http.StatusInternalServerError, "Error preparing weekly data", errDateTrunc)
 				return
 			}
 			wk.WeekStart = currentWeekStart
 			logger.Info("no weekly stats", "week_start", wk.WeekStart.Format("2006-01-02"))
 		} else {
-			logger.Error("fetch weekly stats", "err", err)
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			respondErr(w, http.StatusInternalServerError, "Error fetching weekly stats", err)
 			return
 		}
 	}
 	if err := a.tpl.ExecuteTemplate(w, "weekly.tmpl", wk); err != nil {
-		logger.Error("render weekly", "err", err)
-		http.Error(w, "Error rendering weekly page", http.StatusInternalServerError)
+		respondErr(w, http.StatusInternalServerError, "Error rendering weekly page", err)
 	}
 }
 
@@ -545,8 +535,7 @@ func (a *App) handleGetFood(w http.ResponseWriter, r *http.Request) {
 	}
 	entries, err := a.fetchFood(ctx)
 	if err != nil {
-		logger.Error("fetch food entries", "err", err)
-		http.Error(w, "Error fetching food entries", http.StatusInternalServerError)
+		respondErr(w, http.StatusInternalServerError, "Error fetching food entries", err)
 		return
 	}
 	type apiEntry struct {
@@ -586,8 +575,7 @@ func (a *App) handleGetWeeklySummary(w http.ResponseWriter, r *http.Request) {
 	if dateStr == "" {
 		err = a.db.QueryRow(ctx, `SELECT date_trunc('week', CURRENT_DATE);`).Scan(&weekStartDate)
 		if err != nil {
-			logger.Error("fetch default week start", "err", err)
-			http.Error(w, "Error determining current week start date.", http.StatusInternalServerError)
+			respondErr(w, http.StatusInternalServerError, "Error determining current week start date", err)
 			return
 		}
 	} else {
@@ -600,8 +588,7 @@ func (a *App) handleGetWeeklySummary(w http.ResponseWriter, r *http.Request) {
 		var actualWeekStartForProvidedDate time.Time
 		err = a.db.QueryRow(ctx, `SELECT date_trunc('week', $1::date);`, parsedDate.Format("2006-01-02")).Scan(&actualWeekStartForProvidedDate)
 		if err != nil {
-			logger.Error("truncate start_date", "date", parsedDate.Format("2006-01-02"), "err", err)
-			http.Error(w, "Error processing provided start_date.", http.StatusInternalServerError)
+			respondErr(w, http.StatusInternalServerError, "Error processing provided start_date", err)
 			return
 		}
 		weekStartDate = actualWeekStartForProvidedDate
@@ -625,10 +612,7 @@ func (a *App) handleGetWeeklySummary(w http.ResponseWriter, r *http.Request) {
 			json.NewEncoder(w).Encode(weeklySummary)
 			return
 		}
-		logger.Error("fetch weekly summary", "user", userID, "week_start", weeklySummary.WeekStart.Format("2006-01-02"), "err", err)
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(MoodLogResponse{Success: false, Message: "Error fetching weekly summary."})
+		respondErr(w, http.StatusInternalServerError, "Error fetching weekly summary", err)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
