@@ -133,6 +133,7 @@ func main() {
 	apiMux := http.NewServeMux() // API-only server for MCP.
 
 	// Register UI handlers on the main multiplexer.
+	uiMux.HandleFunc("/login", app.handleLogin)   // PIN login page.
 	uiMux.HandleFunc("/", app.handleIndex)        // Main page, shows daily summary and food log.
 	uiMux.HandleFunc("/log", app.handleLog)       // Handles form submissions for daily metrics.
 	uiMux.HandleFunc("/food", app.handleFood)     // Handles form submissions for food entries.
@@ -156,7 +157,7 @@ func main() {
 	// Configure the HTTP server used for the main instance.
 	server := &http.Server{
 		Addr:    addr,
-		Handler: uiMux,
+		Handler: pinAuthMiddleware(uiMux),
 	}
 
 	// Configure the MCP server only if an address is provided.
@@ -164,7 +165,7 @@ func main() {
 	if mcpAddr != "" {
 		mcpServer = &http.Server{
 			Addr:    mcpAddr,
-			Handler: apiMux,
+			Handler: pinAuthMiddleware(apiMux),
 		}
 	}
 
