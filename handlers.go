@@ -638,3 +638,24 @@ func (a *App) handleGetWeeklySummary(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(weeklySummary)
 }
+
+func (a *App) handleLogin(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		_ = a.tpl.ExecuteTemplate(w, "login.tmpl", nil)
+	case http.MethodPost:
+		if err := r.ParseForm(); err != nil {
+			http.Error(w, "bad form", http.StatusBadRequest)
+			return
+		}
+		if r.FormValue("pin") == "1234" {
+			http.SetCookie(w, &http.Cookie{Name: "pin", Value: "1234", Path: "/", Expires: time.Now().Add(365 * 24 * time.Hour), HttpOnly: true})
+			http.Redirect(w, r, "/", http.StatusSeeOther)
+		} else {
+			data := struct{ Error string }{Error: "Invalid PIN"}
+			_ = a.tpl.ExecuteTemplate(w, "login.tmpl", data)
+		}
+	default:
+		http.Error(w, "method", http.StatusMethodNotAllowed)
+	}
+}
