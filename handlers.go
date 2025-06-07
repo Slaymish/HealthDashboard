@@ -623,7 +623,8 @@ func (a *App) handleGetWeeklySummary(w http.ResponseWriter, r *http.Request) {
 func (a *App) handleLogin(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		_ = a.tpl.ExecuteTemplate(w, "login.tmpl", nil)
+		data := struct{ Error string }{}
+		_ = a.tpl.ExecuteTemplate(w, "login.tmpl", data)
 	case http.MethodPost:
 		if err := r.ParseForm(); err != nil {
 			http.Error(w, "bad form", http.StatusBadRequest)
