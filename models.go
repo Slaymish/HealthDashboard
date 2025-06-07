@@ -65,6 +65,7 @@ type PageData struct {
 	Food     []FoodEntry
 	QuickAdd []QuickAddItem
 	Goals    *GoalProjection
+	Error    string
 }
 
 type WeightLogRequest struct {
