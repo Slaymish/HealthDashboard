@@ -279,6 +279,8 @@ When running on your MCP server, the base URL is `https://mcp.taildb558.ts.net` 
         npm run build:css
         ```
     *   This generates `static/css/app.css` which is served by the Go app.
+    *   A GitHub Actions workflow also runs `npm run build:css` on every push so
+        the compiled CSS is always up-to-date for deployments.
 
 5.  **Build and Run the Go Application:**
     *   From the root of the project directory:
