@@ -6,7 +6,6 @@ import (
 	"embed"
 	"fmt"
 	"html/template"
-	"log"
 	"net/http"
 	"os"
 	"os/signal"
@@ -104,7 +103,8 @@ func main() {
 	// Initialize database connection pool.
 	pool, err := pgxpool.New(context.Background(), os.Getenv("DATABASE_URL"))
 	if err != nil {
-		log.Fatalf("pgx pool: %v", err)
+		logger.Error("pgx pool", "err", err)
+		os.Exit(1)
 	}
 	defer pool.Close() // Ensure the pool is closed when main exits.
 
@@ -170,18 +170,20 @@ func main() {
 
 	// Start the primary HTTP server in a new goroutine.
 	go func() {
-		log.Printf("Listening on %s", addr)
+		logger.Info("server start", "addr", addr)
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("http: %v", err) // Log fatal error if server fails to start (excluding ErrServerClosed).
+			logger.Error("http", "err", err)
+			os.Exit(1)
 		}
 	}()
 
 	// Start the MCP server if configured.
 	if mcpServer != nil {
 		go func() {
-			log.Printf("Listening on MCP %s", mcpAddr)
+			logger.Info("mcp start", "addr", mcpAddr)
 			if err := mcpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-				log.Fatalf("http(mcp): %v", err)
+				logger.Error("http(mcp)", "err", err)
+				os.Exit(1)
 			}
 		}()
 	}
@@ -193,7 +195,7 @@ func main() {
 	<-sig // Block until a signal is received.
 
 	// Perform shutdown with a timeout.
-	log.Println("Shutting down …")
+	logger.Info("shutting down")
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	_ = server.Shutdown(ctx) // Attempt to gracefully shut down the server.
