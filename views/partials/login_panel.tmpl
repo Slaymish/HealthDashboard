@@ -1,14 +1,10 @@
-{{ template "layout.tmpl" . }}
-
-{{ define "content" }}
-<form method="POST" action="/login" class="max-w-xs mx-auto mt-10 space-y-4">
-  <div class="bg-white dark:bg-zinc-900 rounded-2xl shadow shadow-zinc-200 dark:shadow-zinc-900/40 p-6 space-y-4">
+<div class="fixed inset-0 z-50 flex items-center justify-center backdrop-blur-sm bg-black/40">
+  <form method="POST" action="/login" class="bg-white dark:bg-zinc-900 rounded-2xl shadow shadow-zinc-200 dark:shadow-zinc-900/40 p-6 space-y-4">
     <label class="block text-sm font-medium">
       Enter PIN
       <input type="password" name="pin" class="mt-1 block w-full rounded border-gray-300 dark:bg-zinc-800" autofocus />
     </label>
     {{ if .Error }}<p class="text-red-600">{{ .Error }}</p>{{ end }}
     <button type="submit" class="w-full py-2 rounded text-white bg-[var(--accent)] hover:bg-[var(--accent)]/90">Enter</button>
-  </div>
-</form>
-{{ end }}
+  </form>
+</div>

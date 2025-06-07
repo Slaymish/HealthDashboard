@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -10,6 +11,32 @@ import (
 	"time"
 )
 
+func (a *App) buildPageData(ctx context.Context, pivot time.Time) (PageData, error) {
+	summary, err := a.fetchSummary(ctx, pivot, 3)
+	if err != nil {
+		return PageData{}, err
+	}
+	foods, err := a.fetchFood(ctx)
+	if err != nil {
+		return PageData{}, err
+	}
+	quick, err := a.fetchQuickAdd(ctx)
+	if err != nil {
+		return PageData{}, err
+	}
+	goals, err := a.calculateGoalProjection(ctx, 63, 60)
+	if err != nil {
+		logger.Error("calculate goals", "err", err)
+	}
+	return PageData{
+		Pivot:    pivot,
+		Summary:  summary,
+		Food:     foods,
+		QuickAdd: quick,
+		Goals:    goals,
+	}, nil
+}
+
 func (a *App) handleIndex(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	pivot := time.Now()
@@ -18,31 +45,10 @@ func (a *App) handleIndex(w http.ResponseWriter, r *http.Request) {
 			pivot = p
 		}
 	}
-	summary, err := a.fetchSummary(ctx, pivot, 3)
+	data, err := a.buildPageData(ctx, pivot)
 	if err != nil {
-		respondErr(w, http.StatusInternalServerError, "Error fetching summary data", err)
+		respondErr(w, http.StatusInternalServerError, "Error fetching page data", err)
 		return
-	}
-	foods, err := a.fetchFood(ctx)
-	if err != nil {
-		respondErr(w, http.StatusInternalServerError, "Error fetching food data", err)
-		return
-	}
-	quick, err := a.fetchQuickAdd(ctx)
-	if err != nil {
-		respondErr(w, http.StatusInternalServerError, "Error fetching quick add data", err)
-		return
-	}
-	goals, err := a.calculateGoalProjection(ctx, 63, 60)
-	if err != nil {
-		logger.Error("calculate goals", "err", err)
-	}
-	data := PageData{
-		Pivot:    pivot,
-		Summary:  summary,
-		Food:     foods,
-		QuickAdd: quick,
-		Goals:    goals,
 	}
 	if err := a.tpl.ExecuteTemplate(w, "index.tmpl", data); err != nil {
 		respondErr(w, http.StatusInternalServerError, "Error rendering page", err)
@@ -621,10 +627,17 @@ func (a *App) handleGetWeeklySummary(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) handleLogin(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	pivot := time.Now()
 	switch r.Method {
 	case http.MethodGet:
-		data := PageData{}
-		_ = a.tpl.ExecuteTemplate(w, "login.tmpl", data)
+		data, err := a.buildPageData(ctx, pivot)
+		if err != nil {
+			respondErr(w, http.StatusInternalServerError, "Error fetching page data", err)
+			return
+		}
+		data.ShowLogin = true
+		_ = a.tpl.ExecuteTemplate(w, "index.tmpl", data)
 	case http.MethodPost:
 		if err := r.ParseForm(); err != nil {
 			http.Error(w, "bad form", http.StatusBadRequest)
@@ -634,8 +647,14 @@ func (a *App) handleLogin(w http.ResponseWriter, r *http.Request) {
 			http.SetCookie(w, &http.Cookie{Name: "pin", Value: "1234", Path: "/", Expires: time.Now().Add(365 * 24 * time.Hour), HttpOnly: true})
 			http.Redirect(w, r, "/", http.StatusSeeOther)
 		} else {
-			data := PageData{Error: "Invalid PIN"}
-			_ = a.tpl.ExecuteTemplate(w, "login.tmpl", data)
+			data, err := a.buildPageData(ctx, pivot)
+			if err != nil {
+				respondErr(w, http.StatusInternalServerError, "Error fetching page data", err)
+				return
+			}
+			data.ShowLogin = true
+			data.Error = "Invalid PIN"
+			_ = a.tpl.ExecuteTemplate(w, "index.tmpl", data)
 		}
 	default:
 		http.Error(w, "method", http.StatusMethodNotAllowed)

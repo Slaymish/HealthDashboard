@@ -60,12 +60,13 @@ type GoalProjection struct {
 }
 
 type PageData struct {
-	Pivot    time.Time
-	Summary  []DailySummary
-	Food     []FoodEntry
-	QuickAdd []QuickAddItem
-	Goals    *GoalProjection
-	Error    string
+	Pivot     time.Time
+	Summary   []DailySummary
+	Food      []FoodEntry
+	QuickAdd  []QuickAddItem
+	Goals     *GoalProjection
+	ShowLogin bool
+	Error     string
 }
 
 type WeightLogRequest struct {
