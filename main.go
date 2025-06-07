@@ -17,6 +17,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
 )
@@ -219,8 +221,14 @@ func or(a *int, def int) int {
 
 /* ───────────────────── Core app ───────────────────── */
 
+type DB interface {
+	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
+	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+}
+
 type App struct {
-	db  *pgxpool.Pool      // db is the PostgreSQL connection pool.
+	db  DB                 // db is the PostgreSQL connection pool or mock.
 	tpl *template.Template // tpl stores parsed HTML templates.
 }
 
