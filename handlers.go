@@ -3,12 +3,14 @@ package main
 import (
 	"context"
 	"database/sql"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
+	"io"
 )
 
 func (a *App) buildPageData(ctx context.Context, pivot time.Time) (PageData, error) {
@@ -53,6 +55,96 @@ func (a *App) handleIndex(w http.ResponseWriter, r *http.Request) {
 	if err := a.tpl.ExecuteTemplate(w, "index.tmpl", data); err != nil {
 		respondErr(w, http.StatusInternalServerError, "Error rendering page", err)
 	}
+}
+
+func (a *App) handleAgent(w http.ResponseWriter, r *http.Request) {
+	data := time.Now()
+	if err := a.tpl.ExecuteTemplate(w, "agent.tmpl", data); err != nil {
+		respondErr(w, http.StatusInternalServerError, "Error rendering page", err)
+	}
+}
+
+func (a *App) handleAgentMessage(w http.ResponseWriter, r *http.Request) {
+    if r.Method != http.MethodPost {
+        w.Header().Set("Content-Type", "application/json")
+        w.WriteHeader(http.StatusMethodNotAllowed)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Only POST method is allowed"})
+        return
+    }
+
+    // Parse form data instead of JSON
+    if err := r.ParseForm(); err != nil {
+        logger.Error("parse form", "err", err)
+        w.Header().Set("Content-Type", "application/json")
+        w.WriteHeader(http.StatusBadRequest)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Cannot parse form: " + err.Error()})
+        return
+    }
+
+    message := r.FormValue("message")
+    if message == "" {
+        w.Header().Set("Content-Type", "application/json")
+        w.WriteHeader(http.StatusBadRequest)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Message is required"})
+        return
+    }
+
+    logger.Info("received agent request", "message", message)
+
+    // Create JSON request for the agent service
+    req := struct {
+        Message   string `json:"message"`
+        InputType string `json:"input_type"`
+    }{
+        Message:   message,
+        InputType: "text",
+    }
+
+    // Forward to your agent service
+    agentURL := "https://localhost:8000/agent/message"
+    
+    // Create request to agent service
+    payload, _ := json.Marshal(req)
+    agentReq, err := http.NewRequest("POST", agentURL, strings.NewReader(string(payload)))
+    if err != nil {
+        logger.Error("create agent request", "err", err)
+        w.Header().Set("Content-Type", "application/json")
+        w.WriteHeader(http.StatusInternalServerError)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Error creating request"})
+        return
+    }
+    
+    agentReq.Header.Set("Content-Type", "application/json")
+    agentReq.Header.Set("X-Session-Id", r.Header.Get("X-Session-Id"))
+
+    // Create HTTP client that skips TLS verification (like curl --insecure)
+    tr := &http.Transport{
+        TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+    }
+    client := &http.Client{
+        Transport: tr,
+        Timeout:   30 * time.Second,
+    }
+    
+    logger.Info("sending request to agent service", "url", agentURL)
+    resp, err := client.Do(agentReq)
+    if err != nil {
+        logger.Error("agent service request", "err", err)
+        w.Header().Set("Content-Type", "application/json")
+        w.WriteHeader(http.StatusInternalServerError)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Error contacting agent service: " + err.Error()})
+        return
+    }
+    defer resp.Body.Close()
+
+    logger.Info("agent service response", "status", resp.StatusCode)
+
+    // Forward the response
+    w.Header().Set("Content-Type", "application/json")
+    w.WriteHeader(resp.StatusCode)
+    
+    // Copy response body to response writer
+    _, _ = io.Copy(w, resp.Body)
 }
 
 func (a *App) handleLog(w http.ResponseWriter, r *http.Request) {

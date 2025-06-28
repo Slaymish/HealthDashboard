@@ -138,6 +138,8 @@ func main() {
 	uiMux.HandleFunc("/log", app.handleLog)       // Handles form submissions for daily metrics.
 	uiMux.HandleFunc("/food", app.handleFood)     // Handles form submissions for food entries.
 	uiMux.HandleFunc("/weekly", app.handleWeekly) // Renders the weekly summary page.
+	uiMux.HandleFunc("/agent", app.handleAgent) // handle the text agent
+	uiMux.HandleFunc("/agent/message",app.handleAgentMessage)
 
 	// Register API endpoints on both multiplexers.
 	registerAPIRoutes(uiMux, app)
