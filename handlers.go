@@ -58,7 +58,11 @@ func (a *App) handleIndex(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) handleAgent(w http.ResponseWriter, r *http.Request) {
-	data := time.Now()
+	// Pass PageData to the template, similar to other handlers.
+	// The agent page itself might not use all fields, but shared layouts/partials might.
+	data := PageData{
+		ShowLogin: false, // Agent page doesn't require login prompts
+	}
 	if err := a.tpl.ExecuteTemplate(w, "agent.tmpl", data); err != nil {
 		respondErr(w, http.StatusInternalServerError, "Error rendering page", err)
 	}
