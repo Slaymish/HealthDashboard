@@ -63,6 +63,7 @@ func (a *App) handleAgent(w http.ResponseWriter, r *http.Request) {
 	data := PageData{
 		ShowLogin: false, // Agent page doesn't require login prompts
 	}
+	logger.Info("handle agent called")
 	if err := a.tpl.ExecuteTemplate(w, "agent.tmpl", data); err != nil {
 		respondErr(w, http.StatusInternalServerError, "Error rendering page", err)
 	}
