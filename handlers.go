@@ -3,14 +3,12 @@ package main
 import (
 	"context"
 	"database/sql"
-	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
-	"io"
 )
 
 func (a *App) buildPageData(ctx context.Context, pivot time.Time) (PageData, error) {
@@ -43,7 +41,7 @@ func (a *App) handleIndex(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	pivot := time.Now()
 	if qs := r.URL.Query().Get("d"); qs != "" {
-		if p, err := time.Parse("2006-01-02", qs); err == nil {
+		if p, err := time.Parse(DateFormat, qs); err == nil {
 			pivot = p
 		}
 	}
@@ -194,8 +192,7 @@ func (a *App) handleBMI(w http.ResponseWriter, r *http.Request) {
 		}
 		series = append(series, b)
 	}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(series)
+	respondJSON(w, http.StatusOK, series)
 }
 
 func (a *App) handleWeekly(w http.ResponseWriter, r *http.Request) {
@@ -216,7 +213,7 @@ func (a *App) handleWeekly(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			wk.WeekStart = currentWeekStart
-			logger.Info("no weekly stats", "week_start", wk.WeekStart.Format("2006-01-02"))
+			logger.Info("no weekly stats", "week_start", wk.WeekStart.Format(DateFormat))
 		} else {
 			respondErr(w, http.StatusInternalServerError, "Error fetching weekly stats", err)
 			return
@@ -236,42 +233,29 @@ func (a *App) handleLogWeight(w http.ResponseWriter, r *http.Request) {
 	var reqPayload WeightLogRequest
 	if err := json.NewDecoder(r.Body).Decode(&reqPayload); err != nil {
 		logger.Error("decode weight payload", "err", err)
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(WeightLogResponse{Success: false, Message: "Invalid JSON payload: " + err.Error()})
+		respondJSON(w, http.StatusBadRequest, WeightLogResponse{Success: false, Message: "Invalid JSON payload: " + err.Error()})
 		return
 	}
 	if reqPayload.WeightKg <= 0 {
 		logger.Error("invalid weight_kg", "value", reqPayload.WeightKg)
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(WeightLogResponse{Success: false, Message: "weight_kg must be a positive value"})
+		respondJSON(w, http.StatusBadRequest, WeightLogResponse{Success: false, Message: "weight_kg must be a positive value"})
 		return
 	}
-	logDate := time.Now().Format("2006-01-02")
+	logDate := time.Now().Format(DateFormat)
 	if reqPayload.Date != "" {
-		parsedDate, err := time.Parse("2006-01-02", reqPayload.Date)
+		parsedDate, err := time.Parse(DateFormat, reqPayload.Date)
 		if err != nil {
 			logger.Error("invalid date", "date", reqPayload.Date, "err", err)
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusBadRequest)
-			json.NewEncoder(w).Encode(WeightLogResponse{Success: false, Message: "Invalid date format. Please use YYYY-MM-DD."})
+			respondJSON(w, http.StatusBadRequest, WeightLogResponse{Success: false, Message: "Invalid date format. Please use YYYY-MM-DD."})
 			return
 		}
-		logDate = parsedDate.Format("2006-01-02")
+		logDate = parsedDate.Format(DateFormat)
 	}
 	userID := 1
-	var logID int
-	err := a.db.QueryRow(ctx, `
-                INSERT INTO daily_logs (user_id, log_date)
-                VALUES ($1, $2)
-                ON CONFLICT (user_id, log_date) DO UPDATE SET log_date = EXCLUDED.log_date
-                RETURNING log_id`, userID, logDate).Scan(&logID)
+	logID, err := a.ensureDailyLog(ctx, userID, logDate)
 	if err != nil {
 		logger.Error("upsert daily_log", "user", userID, "date", logDate, "err", err)
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(WeightLogResponse{Success: false, Message: "Database error while preparing log entry."})
+		respondJSON(w, http.StatusInternalServerError, WeightLogResponse{Success: false, Message: "Database error while preparing log entry."})
 		return
 	}
 	_, err = a.db.Exec(ctx,
@@ -279,14 +263,10 @@ func (a *App) handleLogWeight(w http.ResponseWriter, r *http.Request) {
 		reqPayload.WeightKg, logID, userID)
 	if err != nil {
 		logger.Error("update weight", "log_id", logID, "err", err)
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(WeightLogResponse{Success: false, Message: "Database error while updating weight."})
+		respondJSON(w, http.StatusInternalServerError, WeightLogResponse{Success: false, Message: "Database error while updating weight."})
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(WeightLogResponse{Success: true, Message: "Weight logged successfully"})
+	respondJSON(w, http.StatusOK, WeightLogResponse{Success: true, Message: "Weight logged successfully"})
 }
 
 func (a *App) handleLogCalorie(w http.ResponseWriter, r *http.Request) {
@@ -298,42 +278,29 @@ func (a *App) handleLogCalorie(w http.ResponseWriter, r *http.Request) {
 	var reqPayload CalorieLogRequest
 	if err := json.NewDecoder(r.Body).Decode(&reqPayload); err != nil {
 		logger.Error("decode calorie payload", "err", err)
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(CalorieLogResponse{Success: false, Message: "Invalid JSON payload: " + err.Error()})
+		respondJSON(w, http.StatusBadRequest, CalorieLogResponse{Success: false, Message: "Invalid JSON payload: " + err.Error()})
 		return
 	}
 	if reqPayload.Calories < 0 {
 		logger.Error("invalid calories", "value", reqPayload.Calories)
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(CalorieLogResponse{Success: false, Message: "calories must be a non-negative value"})
+		respondJSON(w, http.StatusBadRequest, CalorieLogResponse{Success: false, Message: "calories must be a non-negative value"})
 		return
 	}
-	logDate := time.Now().Format("2006-01-02")
+	logDate := time.Now().Format(DateFormat)
 	if reqPayload.Date != "" {
-		parsedDate, err := time.Parse("2006-01-02", reqPayload.Date)
+		parsedDate, err := time.Parse(DateFormat, reqPayload.Date)
 		if err != nil {
 			logger.Error("invalid date", "date", reqPayload.Date, "err", err)
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusBadRequest)
-			json.NewEncoder(w).Encode(CalorieLogResponse{Success: false, Message: "Invalid date format. Please use YYYY-MM-DD."})
+			respondJSON(w, http.StatusBadRequest, CalorieLogResponse{Success: false, Message: "Invalid date format. Please use YYYY-MM-DD."})
 			return
 		}
-		logDate = parsedDate.Format("2006-01-02")
+		logDate = parsedDate.Format(DateFormat)
 	}
 	userID := 1
-	var logID int
-	err := a.db.QueryRow(ctx, `
-                INSERT INTO daily_logs (user_id, log_date)
-                VALUES ($1, $2)
-                ON CONFLICT (user_id, log_date) DO UPDATE SET log_date = EXCLUDED.log_date
-                RETURNING log_id`, userID, logDate).Scan(&logID)
+	logID, err := a.ensureDailyLog(ctx, userID, logDate)
 	if err != nil {
 		logger.Error("upsert daily_log", "user", userID, "date", logDate, "err", err)
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(CalorieLogResponse{Success: false, Message: "Database error while preparing log entry."})
+		respondJSON(w, http.StatusInternalServerError, CalorieLogResponse{Success: false, Message: "Database error while preparing log entry."})
 		return
 	}
 	_, err = a.db.Exec(ctx, `
@@ -341,14 +308,10 @@ func (a *App) handleLogCalorie(w http.ResponseWriter, r *http.Request) {
                 VALUES ($1, $2, NULLIF($3,''))`, logID, reqPayload.Calories, reqPayload.Note)
 	if err != nil {
 		logger.Error("insert calorie", "log_id", logID, "err", err)
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(CalorieLogResponse{Success: false, Message: "Database error while logging calorie entry."})
+		respondJSON(w, http.StatusInternalServerError, CalorieLogResponse{Success: false, Message: "Database error while logging calorie entry."})
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(CalorieLogResponse{Success: true, Message: "Calorie entry logged successfully"})
+	respondJSON(w, http.StatusOK, CalorieLogResponse{Success: true, Message: "Calorie entry logged successfully"})
 }
 
 func (a *App) handleLogCardio(w http.ResponseWriter, r *http.Request) {
@@ -360,42 +323,29 @@ func (a *App) handleLogCardio(w http.ResponseWriter, r *http.Request) {
 	var reqPayload CardioLogRequest
 	if err := json.NewDecoder(r.Body).Decode(&reqPayload); err != nil {
 		logger.Error("decode cardio payload", "err", err)
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(CardioLogResponse{Success: false, Message: "Invalid JSON payload: " + err.Error()})
+		respondJSON(w, http.StatusBadRequest, CardioLogResponse{Success: false, Message: "Invalid JSON payload: " + err.Error()})
 		return
 	}
 	if reqPayload.DurationMin < 0 {
 		logger.Error("invalid duration", "value", reqPayload.DurationMin)
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(CardioLogResponse{Success: false, Message: "duration_min must be a non-negative value"})
+		respondJSON(w, http.StatusBadRequest, CardioLogResponse{Success: false, Message: "duration_min must be a non-negative value"})
 		return
 	}
-	logDate := time.Now().Format("2006-01-02")
+	logDate := time.Now().Format(DateFormat)
 	if reqPayload.Date != "" {
-		parsedDate, err := time.Parse("2006-01-02", reqPayload.Date)
+		parsedDate, err := time.Parse(DateFormat, reqPayload.Date)
 		if err != nil {
 			logger.Error("invalid date", "date", reqPayload.Date, "err", err)
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusBadRequest)
-			json.NewEncoder(w).Encode(CardioLogResponse{Success: false, Message: "Invalid date format. Please use YYYY-MM-DD."})
+			respondJSON(w, http.StatusBadRequest, CardioLogResponse{Success: false, Message: "Invalid date format. Please use YYYY-MM-DD."})
 			return
 		}
-		logDate = parsedDate.Format("2006-01-02")
+		logDate = parsedDate.Format(DateFormat)
 	}
 	userID := 1
-	var logID int
-	err := a.db.QueryRow(ctx, `
-                INSERT INTO daily_logs (user_id, log_date)
-                VALUES ($1, $2)
-                ON CONFLICT (user_id, log_date) DO UPDATE SET log_date = EXCLUDED.log_date
-                RETURNING log_id`, userID, logDate).Scan(&logID)
+	logID, err := a.ensureDailyLog(ctx, userID, logDate)
 	if err != nil {
 		logger.Error("upsert daily_log", "user", userID, "date", logDate, "err", err)
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(CardioLogResponse{Success: false, Message: "Database error while preparing log entry."})
+		respondJSON(w, http.StatusInternalServerError, CardioLogResponse{Success: false, Message: "Database error while preparing log entry."})
 		return
 	}
 	_, err = a.db.Exec(ctx,
@@ -405,14 +355,10 @@ func (a *App) handleLogCardio(w http.ResponseWriter, r *http.Request) {
 		reqPayload.DurationMin, logID, userID)
 	if err != nil {
 		logger.Error("update activity", "log_id", logID, "err", err)
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(CardioLogResponse{Success: false, Message: "Database error while logging cardio activity."})
+		respondJSON(w, http.StatusInternalServerError, CardioLogResponse{Success: false, Message: "Database error while logging cardio activity."})
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(CardioLogResponse{Success: true, Message: "Cardio activity logged successfully"})
+	respondJSON(w, http.StatusOK, CardioLogResponse{Success: true, Message: "Cardio activity logged successfully"})
 }
 
 func (a *App) handleLogMood(w http.ResponseWriter, r *http.Request) {
@@ -424,35 +370,24 @@ func (a *App) handleLogMood(w http.ResponseWriter, r *http.Request) {
 	var reqPayload MoodLogRequest
 	if err := json.NewDecoder(r.Body).Decode(&reqPayload); err != nil {
 		logger.Error("decode mood payload", "err", err)
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(MoodLogResponse{Success: false, Message: "Invalid JSON payload: " + err.Error()})
+		respondJSON(w, http.StatusBadRequest, MoodLogResponse{Success: false, Message: "Invalid JSON payload: " + err.Error()})
 		return
 	}
-	logDate := time.Now().Format("2006-01-02")
+	logDate := time.Now().Format(DateFormat)
 	if reqPayload.Date != "" {
-		parsedDate, err := time.Parse("2006-01-02", reqPayload.Date)
+		parsedDate, err := time.Parse(DateFormat, reqPayload.Date)
 		if err != nil {
 			logger.Error("invalid date", "date", reqPayload.Date, "err", err)
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusBadRequest)
-			json.NewEncoder(w).Encode(MoodLogResponse{Success: false, Message: "Invalid date format. Please use YYYY-MM-DD."})
+			respondJSON(w, http.StatusBadRequest, MoodLogResponse{Success: false, Message: "Invalid date format. Please use YYYY-MM-DD."})
 			return
 		}
-		logDate = parsedDate.Format("2006-01-02")
+		logDate = parsedDate.Format(DateFormat)
 	}
 	userID := 1
-	var logID int
-	err := a.db.QueryRow(ctx, `
-                INSERT INTO daily_logs (user_id, log_date)
-                VALUES ($1, $2)
-                ON CONFLICT (user_id, log_date) DO UPDATE SET log_date = EXCLUDED.log_date
-                RETURNING log_id`, userID, logDate).Scan(&logID)
+	logID, err := a.ensureDailyLog(ctx, userID, logDate)
 	if err != nil {
 		logger.Error("upsert daily_log", "user", userID, "date", logDate, "err", err)
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(MoodLogResponse{Success: false, Message: "Database error while preparing log entry."})
+		respondJSON(w, http.StatusInternalServerError, MoodLogResponse{Success: false, Message: "Database error while preparing log entry."})
 		return
 	}
 	_, err = a.db.Exec(ctx,
@@ -460,14 +395,10 @@ func (a *App) handleLogMood(w http.ResponseWriter, r *http.Request) {
 		reqPayload.Mood, logID, userID)
 	if err != nil {
 		logger.Error("update mood", "log_id", logID, "err", err)
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(MoodLogResponse{Success: false, Message: "Database error while logging mood."})
+		respondJSON(w, http.StatusInternalServerError, MoodLogResponse{Success: false, Message: "Database error while logging mood."})
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(MoodLogResponse{Success: true, Message: "Mood logged successfully"})
+	respondJSON(w, http.StatusOK, MoodLogResponse{Success: true, Message: "Mood logged successfully"})
 }
 
 func (a *App) handleGetDailySummary(w http.ResponseWriter, r *http.Request) {
@@ -482,7 +413,7 @@ func (a *App) handleGetDailySummary(w http.ResponseWriter, r *http.Request) {
 	if dateStr == "" {
 		queryDate = time.Now()
 	} else {
-		queryDate, err = time.Parse("2006-01-02", dateStr)
+		queryDate, err = time.Parse(DateFormat, dateStr)
 		if err != nil {
 			logger.Error("invalid date query", "date", dateStr, "err", err)
 			http.Error(w, "Invalid date format. Please use YYYY-MM-DD.", http.StatusBadRequest)
@@ -493,15 +424,11 @@ func (a *App) handleGetDailySummary(w http.ResponseWriter, r *http.Request) {
 	userID := 1
 	summary, err := a.fetchSingleDaySummary(ctx, queryDate, userID)
 	if err != nil {
-		logger.Error("fetch single day summary", "user", userID, "date", queryDate.Format("2006-01-02"), "err", err)
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(MoodLogResponse{Success: false, Message: "Error fetching daily summary."})
+		logger.Error("fetch single day summary", "user", userID, "date", queryDate.Format(DateFormat), "err", err)
+		respondJSON(w, http.StatusInternalServerError, MoodLogResponse{Success: false, Message: "Error fetching daily summary."})
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(summary)
+	respondJSON(w, http.StatusOK, summary)
 }
 
 func (a *App) handleGetCaloriesToday(w http.ResponseWriter, r *http.Request) {
@@ -518,21 +445,17 @@ func (a *App) handleGetCaloriesToday(w http.ResponseWriter, r *http.Request) {
                   FROM daily_calorie_entries e
                   JOIN daily_logs dl ON e.log_id = dl.log_id
                  WHERE dl.user_id = $1 AND dl.log_date = $2`,
-		userID, currentDate.Format("2006-01-02")).Scan(&totalCalories)
+		userID, currentDate.Format(DateFormat)).Scan(&totalCalories)
 	if err != nil {
-		logger.Error("fetch total calories", "user", userID, "date", currentDate.Format("2006-01-02"), "err", err)
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(MoodLogResponse{Success: false, Message: "Error fetching total calories."})
+		logger.Error("fetch total calories", "user", userID, "date", currentDate.Format(DateFormat), "err", err)
+		respondJSON(w, http.StatusInternalServerError, MoodLogResponse{Success: false, Message: "Error fetching total calories."})
 		return
 	}
 	response := CaloriesTodayResponse{
-		Date:          currentDate.Format("2006-01-02"),
+		Date:          currentDate.Format(DateFormat),
 		TotalCalories: totalCalories,
 	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(response)
+	respondJSON(w, http.StatusOK, response)
 }
 
 func (a *App) handleGetFood(w http.ResponseWriter, r *http.Request) {
@@ -566,8 +489,7 @@ func (a *App) handleGetFood(w http.ResponseWriter, r *http.Request) {
 			Note:      note,
 		})
 	}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(out)
+	respondJSON(w, http.StatusOK, out)
 }
 
 func (a *App) handleGetWeeklySummary(w http.ResponseWriter, r *http.Request) {
@@ -587,14 +509,14 @@ func (a *App) handleGetWeeklySummary(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	} else {
-		parsedDate, err := time.Parse("2006-01-02", dateStr)
+		parsedDate, err := time.Parse(DateFormat, dateStr)
 		if err != nil {
 			logger.Error("invalid start_date", "date", dateStr, "err", err)
 			http.Error(w, "Invalid start_date format. Please use YYYY-MM-DD.", http.StatusBadRequest)
 			return
 		}
 		var actualWeekStartForProvidedDate time.Time
-		err = a.db.QueryRow(ctx, `SELECT date_trunc('week', $1::date);`, parsedDate.Format("2006-01-02")).Scan(&actualWeekStartForProvidedDate)
+		err = a.db.QueryRow(ctx, `SELECT date_trunc('week', $1::date);`, parsedDate.Format(DateFormat)).Scan(&actualWeekStartForProvidedDate)
 		if err != nil {
 			respondErr(w, http.StatusInternalServerError, "Error processing provided start_date", err)
 			return
@@ -615,17 +537,13 @@ func (a *App) handleGetWeeklySummary(w http.ResponseWriter, r *http.Request) {
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusOK)
-			json.NewEncoder(w).Encode(weeklySummary)
+			respondJSON(w, http.StatusOK, weeklySummary)
 			return
 		}
 		respondErr(w, http.StatusInternalServerError, "Error fetching weekly summary", err)
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(weeklySummary)
+	respondJSON(w, http.StatusOK, weeklySummary)
 }
 
 func (a *App) handleLogin(w http.ResponseWriter, r *http.Request) {

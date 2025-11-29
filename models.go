@@ -117,6 +117,18 @@ type CaloriesTodayResponse struct {
 
 // Database helper functions moved from main.go
 
+// ensureDailyLog ensures a daily log exists for the given user and date,
+// returning the log_id. This consolidates the repeated upsert pattern.
+func (a *App) ensureDailyLog(ctx context.Context, userID int, logDate string) (int, error) {
+	var logID int
+	err := a.db.QueryRow(ctx, `
+		INSERT INTO daily_logs (user_id, log_date)
+		VALUES ($1, $2)
+		ON CONFLICT (user_id, log_date) DO UPDATE SET log_date = EXCLUDED.log_date
+		RETURNING log_id`, userID, logDate).Scan(&logID)
+	return logID, err
+}
+
 func (a *App) fetchSummary(ctx context.Context, pivot time.Time, span int) ([]DailySummary, error) {
 	start := pivot.AddDate(0, 0, -span)
 	end := pivot.AddDate(0, 0, span)
