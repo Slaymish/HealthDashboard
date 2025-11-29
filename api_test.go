@@ -84,3 +84,21 @@ func TestFetchSingleDaySummary(t *testing.T) {
 
 	require.NoError(t, mock.ExpectationsWereMet())
 }
+
+func TestEnsureDailyLog(t *testing.T) {
+	mock, err := pgxmock.NewPool()
+	require.NoError(t, err)
+	defer mock.Close()
+
+	mock.ExpectQuery("INSERT INTO daily_logs").
+		WithArgs(1, "2024-01-15").
+		WillReturnRows(pgxmock.NewRows([]string{"log_id"}).AddRow(42))
+
+	app := &App{db: mock}
+
+	logID, err := app.ensureDailyLog(context.Background(), 1, "2024-01-15")
+	require.NoError(t, err)
+	require.Equal(t, 42, logID)
+
+	require.NoError(t, mock.ExpectationsWereMet())
+}

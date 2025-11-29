@@ -2,6 +2,9 @@ package main
 
 import (
 	"database/sql"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 )
 
@@ -78,5 +81,37 @@ func TestMod(t *testing.T) {
 func TestSub(t *testing.T) {
 	if got := sub(7, 2); got != 5 {
 		t.Errorf("sub(7,2) = %d, want 5", got)
+	}
+}
+
+func TestDateFormat(t *testing.T) {
+	if DateFormat != "2006-01-02" {
+		t.Errorf("DateFormat = %q, want '2006-01-02'", DateFormat)
+	}
+}
+
+func TestRespondJSON(t *testing.T) {
+	type testPayload struct {
+		Message string `json:"message"`
+		Value   int    `json:"value"`
+	}
+
+	w := httptest.NewRecorder()
+	respondJSON(w, http.StatusOK, testPayload{Message: "test", Value: 42})
+
+	res := w.Result()
+	if res.StatusCode != http.StatusOK {
+		t.Errorf("status = %d, want %d", res.StatusCode, http.StatusOK)
+	}
+	if ct := res.Header.Get("Content-Type"); ct != "application/json" {
+		t.Errorf("Content-Type = %q, want 'application/json'", ct)
+	}
+
+	var got testPayload
+	if err := json.NewDecoder(res.Body).Decode(&got); err != nil {
+		t.Fatalf("decode error: %v", err)
+	}
+	if got.Message != "test" || got.Value != 42 {
+		t.Errorf("body = %+v, want {Message:test Value:42}", got)
 	}
 }
