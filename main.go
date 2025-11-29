@@ -74,7 +74,7 @@ func fmtIntWithSign(p *int) string {
 
 func safeHTML(s string) template.HTML { return template.HTML(s) }
 func mod(a, b int) int                { return a % b }
-func todayStr() string                { return time.Now().Format("2006-01-02") }
+func todayStr() string                { return time.Now().Format(DateFormat) }
 func sub(a, b int) int                { return a - b }
 func or(a *int, def int) int {
 	if a == nil {
